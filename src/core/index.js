@@ -18,3 +18,4 @@ var g = 4;
 var h=5;
 `
 window.ast = new AST(sent);
+console.log(ast);
