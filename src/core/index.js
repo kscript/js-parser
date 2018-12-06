@@ -6,12 +6,16 @@ let sent = `
 var a = "var a = '1'",
 b = 2;
 var b1 =  ;"  var ds;"
+function a(){
+  console.log(1)
+  return 1
+}
 var c = '
 1
 3'
-//var d;
+var d
 var e = ;
-//var f= 3;
+var f= 
 /*
 var g = 4;
 */

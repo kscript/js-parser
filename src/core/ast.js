@@ -17,24 +17,29 @@ export class AST {
   }
   parse(){
     this.terms();
-    this.grammar();
+    this.grammar(this.termsTree);
   }
   terms(){
     this.lines = this.annotation(this.lines);
     this.termsTree = this.buildTermsTree(this.lines);
   }
   grammar(lines){
+    let content = '__C__';
+    let mode = '';
     lines = lines || this.lines;
     lines.forEach(item => {
-      this.Statement(item, result => {
-        if(!this.Statement(result)){
-          if(!this.Function(result)){
-          }
+      item = this.restoreByTermsTree([item], content, '');
+      if(!this.Statement(item, content)){
+        if(!this.Function(item, content)){
+        } else {
+          mode = 'function';
         }
-      });
-    })
+      } else {
+        mode = 'statement';
+      }
+  })
   }
-  Statement(str){
+  Statement(str, content){
     // 查找 var|let|const ..
     let result = str.match(/^(var|let|const)\s+([^\s=])/);
     // 如果找到, 说明是声明语句, 继续解析
@@ -47,20 +52,22 @@ export class AST {
   parseStatement(result){
     let value = '';
     let str = result.input;
-    let res = str.match(/^(var|let|const)\s+(.*?)\s{0,}([=,;])\s{0,}(.*?)$/);
+    let res = str.match(/^(var|let|const)\s+(.*?)\s{0,}([=,;])\s{0,}(.*?)(,|;|)$/);
     if(res){
       value = this.parseStatementValue(res);
       this.grammarTree.push({
-        type: res[1],
+        mode: res[1],
         name: res[2],
-        value: value,
+        type: res[3],
+        value: res[4],
+        end: res[5],
         result: res
       });
       this.log('@parseStatement result?', str, res, value);
     } else {
       value = this.parseStatementValue(result);
       this.grammarTree.push({
-        type: result[1],
+        mode: result[1],
         name: result[2],
         value: value,
         result: result
@@ -71,15 +78,18 @@ export class AST {
   parseStatementValue(value){
     return value;
   }
-  Function(str, parse){
+  Function(str, content){
     // 查找 var|let|const ..
     let result = str.match(/function\s+(.*?)\s{0,}/);
     // 如果找到, 说明是声明语句, 继续解析
     if (result) {
-      return this.parseStatement(result);
+      return this.parseFunction(result);
     } else {
       return false;
     }
+  }
+  parseFunction(result){
+
   }
   // 去注释, 保留行信息
   annotation(lines){
@@ -110,18 +120,49 @@ export class AST {
     }
     return list;
   }
+  buildTermsTree(lines){
+    let stringTree = this.formatString(lines);
+
+    return stringTree
+  }
+  createRegExp(map, mode){
+    let obj = {};
+    let text = [];
+    for(let key in map){
+      if(map.hasOwnProperty(key)){
+        if(!obj[key]){
+          obj[key] = 1;
+          text.push(key);
+        }
+        if(!obj[map[key]]){
+          obj[map[key]] = 1;
+          text.push(map[key]);
+        }
+      }
+    }
+    return new RegExp( '(' + text.join("|") + ')', mode);
+  }
   // 处理字符串
-  buildTermsTree(lines, symbol){
+  formatString(lines, map){
+    map = map || {
+      '\'': '\'',
+      '"': '"',
+      '{': '}'
+    }
     lines = lines || this.lines || [];
+    let symbol;
     let group = [];
     let list = [];
     let type = 'line';
     let symbols = [];
     let text = '';
     let blockno = 0;
+    let reg = this.createRegExp(map, 'g');
+    // let reg = /('|"|{|})/g;
     lines.forEach((item, lineno) => {
       if (item) {
-        symbols = item.match(/('|")/g) || [];
+        reg.lastIndex = 0;
+        symbols = item.match(reg) || [];
 
         if(symbols.length === 0){
           if(type === 'block'){
@@ -133,15 +174,19 @@ export class AST {
               left: item,
               content: '',
               right: '',
-              symbol: ''
+              symbol: '',
+              scope: '',
+              type: type,
+              t: 0
             }]);
           }
         } else if(symbols.length === 1){
           // 如果是段落
           if(type === 'block'){
             // 如果符号可以匹配 右引号
-            if(symbol === symbols[0]){
-              let index = item.indexOf(symbol);
+            
+            if(map[symbol] === symbols[0]){
+              let index = item.indexOf(map[symbol]);
               text += '\n' + item.slice(0, index);
               group.push({
                 line: blockno,
@@ -149,15 +194,21 @@ export class AST {
                 index: index,
                 content: text,
                 right: '',
-                symbol: symbol
+                symbol: map[symbol],
+                scope: symbol,
+                type: type,
+                t:1
               });
               if(index + symbol.length < item.length - 1){
                 group.push({
                   line: blockno,
                   left: '',
                   content: '',
-                  right: item.slice(index + symbol.length),
-                  symbol: symbol
+                  right: item.slice(index + map[symbol].length),
+                  symbol: map[symbol],
+                  scope: symbol,
+                  type: type,
+                  t:2
                 });
               }
               list.push(group);
@@ -184,13 +235,16 @@ export class AST {
               left: item.slice(0, item.indexOf(symbol)),
               content: '',
               right: '',
-              symbol: ''
+              symbol: '',
+              scope: symbol,
+              type: type,
+              t:4
             });
-            text += item.slice(item.indexOf(symbol) + symbol.length);
+            text += item.slice(item.indexOf(symbol) + map[symbol].length);
           }
         // 找到多个
         } else {
-          let result = this.formatSymbol(item, symbols, lineno);
+          let result = this.formatSymbol(item, symbols, map, lineno);
           symbol = result[0];
           if(symbol){
             type = 'block';
@@ -209,90 +263,41 @@ export class AST {
     }
     return list;
   }
-  restoreByTermsTree(tree){
+  /**
+   * 还原字符串
+   * @param {array} tree 经过处理字符串函数buildTermsTree后的数据 数据结构[[{}]]
+   * @param {string=} content 是否用指定字符占位 (传递 空字符串 或 非字符串时, 将使用默认值, 不传则使用原始文本)
+   */
+  restoreByTermsTree(tree, content, segmentation){
     let text = '';
+    segmentation = arguments.length > 2 ? typeof segmentation === 'string' ? segmentation : '\n' : '\n';
+    content = arguments.length > 1 ? typeof content === 'string' ? content : '__CONTENT__' : '';
     tree = tree || this.termsTree || [];
     tree.forEach(line => {
-      line.forEach(item => {
+      (line || []).forEach(item => {
         if(item.symbol){
-          text += item.left + item.symbol + item.content + item.symbol + item.right;
+          text += item.left + (item.symbol !== item.scope ? item.scope: item.symbol) + (content || item.content) + item.symbol + item.right;
         } else {
           text += item.left + item.right;
         }
       });
-      text += '\n';
+      text += segmentation;
     });
     return text;
   }
-  // 
-  buildTermsTree2(lines){
-    let tree = [];
-    let list = [];
-    let index;
-    let result = [];
-    let state = {
-      type: 'line'
-    };
-    let text = '';
-    let symbol = '"';
-    lines = lines || this.lines || [];
 
-    lines.forEach(item => {
-      // 先判断是否是段落文本
-      if(state.type === 'block'){
-        index = item.indexOf(symbol);
-        // 如果没找到, 记录一下, 继续往下一行
-        if(index === -1){
-          text += '\n' + item;
-          return ;
-        } else {
-          // 如果找到, 将这一段截取出来.
-          tree.push({
-            index: 0,
-            symbol: '',
-            content: text + item.slice(0, index),
-            right: '',
-            left: ''
-          });
-          // 继续找剩下的
-          item = item.slice(index + symbol.length);
-        }
-      } 
-      list = item.match(/("|')/g) || [];
-      // 没找到字符串
-      if(list.length === 0){
-        if(item){
-          tree.push({
-            index: 0,
-            symbol: '',
-            content: '',
-            right: '',
-            left: item
-          })
-        } else {
-          tree.push({
-          });
-        }
-      // 找到一个
-      } else if(list.length === 1){
-        symbol = list[0];
-        state.type = 'block';
-        text = item.slice(item.indexOf(symbol));
-      // 找到多个
-      } else {
-        result = this.formatSymbol(item, list);
-        if (result[0]) {
-          state.type = 'block';
-          text = result[1].slice(-1)[0].right;
-        } else {
-          tree = tree.concat(result[1]);
-        }
-      }
-    });
+  formatFunction(lines){
 
-    return tree;
   }
-  formatSymbol(text, list, lineno){
+
+  formatBlock(lines){
+    lines = lines || this.lines;
+    lines.forEach(item => {
+      
+    })
+  }
+  
+  formatSymbol(text, list, map, lineno){
     lineno = lineno || 0;
     let symbol = '';
     let symbolLen = 0;
@@ -304,6 +309,7 @@ export class AST {
     let count = 0;
     let content;
     list.forEach(item => {
+      // debugger
       // 左引号
       if(symbol === ''){
         symbol = item;
@@ -312,11 +318,10 @@ export class AST {
         left = text.slice(0, index);
         text = text.slice(index + symbol.length);
         // 右引号
-      } else if(symbol === item){
-        // res = this.splitSymbol(text, symbol);
-        // left = res.left;
-        symbolLen = symbol.length;
-        index = text.indexOf(symbol);
+      } else if(map[symbol] === item){
+
+        symbolLen = map[symbol].length;
+        index = text.indexOf(map[symbol]);
         content = text.slice(0, index);
         result.push({
           line: lineno,
@@ -324,11 +329,14 @@ export class AST {
           left: left,
           content: content,
           right: '',
-          symbol: symbol
+          symbol: symbol,
+          scope: symbol,
+          type: 'line',
+          t: 5
         });
         symbol = '';
       }
-      count += index + symbol.length;
+      count += index + symbolLen;
     });
 
     result.push({
@@ -337,7 +345,10 @@ export class AST {
       left: '',
       content: '',
       right: text.slice(index + symbolLen),
-      symbol: symbol
+      symbol: symbol,
+      scope: symbol,
+      type: 'line',
+      t: 6
     });
 
     // 如果 符号不是空的, 说明是在左引号前停止
@@ -346,19 +357,7 @@ export class AST {
       result
     ]
   }
-  splitSymbol (text, symbol){
-    let index = text.indexOf(symbol);
-    let nextIndex = text.slice(index + symbol.length).indexOf(symbol);
-    let left = text.slice(0, index);
-    let content = text.slice(index + symbol.length, nextIndex);
-    return {
-      index,
-      nextIndex,
-      left,
-      content,
-      symbol
-    };
-  }
+
   // 左右空格
   trim(str){
     str = str || '';
