@@ -64,7 +64,7 @@
 /******/
 /******/ 	var hotApplyOnUpdate = true;
 /******/ 	// eslint-disable-next-line no-unused-vars
-/******/ 	var hotCurrentHash = "b5445e619ccc0cf2ae43";
+/******/ 	var hotCurrentHash = "744ce3549bbefee8893f";
 /******/ 	var hotRequestTimeout = 10000;
 /******/ 	var hotCurrentModuleData = {};
 /******/ 	var hotCurrentChildModule;
@@ -829,6 +829,7 @@ var g = 4;
 var h=5;
 `
 window.ast = new _ast__WEBPACK_IMPORTED_MODULE_0__["AST"](sent);
+console.log(ast);
 
 
 /***/ }),
