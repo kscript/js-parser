@@ -64,7 +64,7 @@
 /******/
 /******/ 	var hotApplyOnUpdate = true;
 /******/ 	// eslint-disable-next-line no-unused-vars
-/******/ 	var hotCurrentHash = "744ce3549bbefee8893f";
+/******/ 	var hotCurrentHash = "7c5f7a66882ac5a6715d";
 /******/ 	var hotRequestTimeout = 10000;
 /******/ 	var hotCurrentModuleData = {};
 /******/ 	var hotCurrentChildModule;
@@ -808,27 +808,40 @@ __webpack_require__.r(__webpack_exports__);
 
 "use strict";
 __webpack_require__.r(__webpack_exports__);
-/* harmony import */ var _ast__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(2);
+/* harmony import */ var _kst__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(2);
 
 
 
-window.AST = _ast__WEBPACK_IMPORTED_MODULE_0__["AST"];
+window.AST = _kst__WEBPACK_IMPORTED_MODULE_0__["AST"];
 let sent = `
 var a = "var a = '1'",
 b = 2;
-var b1 =  ;"  var ds;"
+var $b1 =  ;"  var ds;"
+function a(){
+  console.log(1);
+
+  for(var i = 0; i<= 10; i++){
+    console.log(i)
+  }
+  function b(){
+    return 111
+  }
+  return function(){
+    return i
+  }
+}
 var c = '
 1
-3'
-//var d;
+3
+var d
 var e = ;
-//var f= 3;
+var f= '
 /*
 var g = 4;
-*/
+*//*1*//*222*/123
 var h=5;
 `
-window.ast = new _ast__WEBPACK_IMPORTED_MODULE_0__["AST"](sent);
+window.ast = new _kst__WEBPACK_IMPORTED_MODULE_0__["AST"](sent,{});
 console.log(ast);
 
 
@@ -839,366 +852,191 @@ console.log(ast);
 "use strict";
 __webpack_require__.r(__webpack_exports__);
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "AST", function() { return AST; });
+/* harmony import */ var _type__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(3);
+
+
+
 class AST {
-  constructor(sentence){
+  constructor(content, option){
+    this.content = content;
+    this.option = option;
+    this.lines = content.split("\n")
+    this.linenos = this.lineIndex();
     this.logs = [];
-    // 输入语句
-    this.sentence = sentence || '';
-    // 分行
-    this.list = this.lines = this.sentence.split("\n");
-    // 词法树
     this.termsTree = [];
-    // 语法树
     this.grammarTree = [];
-    // 调用解析器
     this.parse();
   }
   log(){
     this.logs.push(arguments);
   }
-  parse(){
-    this.terms();
-    this.grammar();
-  }
-  terms(){
-    this.lines = this.annotation(this.lines);
-    this.termsTree = this.buildTermsTree(this.lines);
-  }
-  grammar(lines){
-    lines = lines || this.lines;
-    lines.forEach(item => {
-      this.Statement(item, result => {
-        if(!this.Statement(result)){
-          if(!this.Function(result)){
-          }
-        }
-      });
-    })
-  }
-  Statement(str){
-    // 查找 var|let|const ..
-    let result = str.match(/^(var|let|const)\s+([^\s=])/);
-    // 如果找到, 说明是声明语句, 继续解析
-    if (result) {
-      return this.parseStatement(result);
-    } else {
-      return false;
-    }
-  }
-  parseStatement(result){
-    let value = '';
-    let str = result.input;
-    let res = str.match(/^(var|let|const)\s+(.*?)\s{0,}([=,;])\s{0,}(.*?)$/);
-    if(res){
-      value = this.parseStatementValue(res);
-      this.grammarTree.push({
-        type: res[1],
-        name: res[2],
-        value: value,
-        result: res
-      });
-      this.log('@parseStatement result?', str, res, value);
-    } else {
-      value = this.parseStatementValue(result);
-      this.grammarTree.push({
-        type: result[1],
-        name: result[2],
-        value: value,
-        result: result
-      });
-      this.log('@parseStatement result?!', str, result);
-    }
-  }
-  parseStatementValue(value){
-    return value;
-  }
-  Function(str, parse){
-    // 查找 var|let|const ..
-    let result = str.match(/function\s+(.*?)\s{0,}/);
-    // 如果找到, 说明是声明语句, 继续解析
-    if (result) {
-      return this.parseStatement(result);
-    } else {
-      return false;
-    }
-  }
-  // 去注释, 保留行信息
-  annotation(lines){
-    let list = [];
-    let type = 'line';
+  lineIndex(lines){
     lines = lines || this.lines || [];
-    lines.forEach(item => {
-      if (type === 'block') {
-        if (/\*\//.test(item)) {
-          type = 'line';
-          item = item.replace(/^(.*?)\*\//g, '');
-        } else {
-          item = '';
-        }
-      }
-      if (type === 'line'){
-        if (/\/\*/.test(item)) {
-          type = 'block';
-          item = item.replace(/\/\*(.*?)$/g, '');
-        } else {
-          item = item.replace(/\/\/(.*?)$/g, '');
-        }
-      }
-      list.push(item);
-    });
-    if(type === 'block'){
-      // throw(new Error(''))
-    }
-    return list;
-  }
-  // 处理字符串
-  buildTermsTree(lines, symbol){
-    lines = lines || this.lines || [];
-    let group = [];
     let list = [];
-    let type = 'line';
-    let symbols = [];
-    let text = '';
-    let blockno = 0;
-    lines.forEach((item, lineno) => {
-      if (item) {
-        symbols = item.match(/('|")/g) || [];
-
-        if(symbols.length === 0){
-          if(type === 'block'){
-            text += '\n' + item;
-          } else {
-            // 不是段落 且 没有找到引号, 为新行
-            list.push([{
-              line: lineno,
-              left: item,
-              content: '',
-              right: '',
-              symbol: ''
-            }]);
-          }
-        } else if(symbols.length === 1){
-          // 如果是段落
-          if(type === 'block'){
-            // 如果符号可以匹配 右引号
-            if(symbol === symbols[0]){
-              let index = item.indexOf(symbol);
-              text += '\n' + item.slice(0, index);
-              group.push({
-                line: blockno,
-                left: '',
-                index: index,
-                content: text,
-                right: '',
-                symbol: symbol
-              });
-              if(index + symbol.length < item.length - 1){
-                group.push({
-                  line: blockno,
-                  left: '',
-                  content: '',
-                  right: item.slice(index + symbol.length),
-                  symbol: symbol
-                });
-              }
-              list.push(group);
-              // 引号闭合
-              symbol = '';
-              text = '';
-              type = 'line';
-              blockno = 0;
-              group = [];
-            } else {
-              text += '\n' + item;
-            }
-          } else {
-            // 如果没有记录段落的开始行号
-            if (blockno === 0) {
-              blockno = lineno;
-              // 左引号
-              symbol = symbols[0];
-            }
-            type = 'block';
-            group.push({
-              line: blockno,
-              index: 0,
-              left: item.slice(0, item.indexOf(symbol)),
-              content: '',
-              right: '',
-              symbol: ''
-            });
-            text += item.slice(item.indexOf(symbol) + symbol.length);
-          }
-        // 找到多个
-        } else {
-          let result = this.formatSymbol(item, symbols, lineno);
-          symbol = result[0];
-          if(symbol){
-            type = 'block';
-            text += result[1].right;
-          } else {
-            text = '';
-            type = 'line';
-          }
-          list.push(result[1]);
-        }
-      } else {
-        // list.push([]);
-      }
-    });
-    if(type === 'block'){
-    }
-    return list;
-  }
-  restoreByTermsTree(tree){
-    let text = '';
-    tree = tree || this.termsTree || [];
-    tree.forEach(line => {
-      line.forEach(item => {
-        if(item.symbol){
-          text += item.left + item.symbol + item.content + item.symbol + item.right;
-        } else {
-          text += item.left + item.right;
-        }
-      });
-      text += '\n';
-    });
-    return text;
-  }
-  // 
-  buildTermsTree2(lines){
-    let tree = [];
-    let list = [];
-    let index;
-    let result = [];
-    let state = {
-      type: 'line'
-    };
-    let text = '';
-    let symbol = '"';
-    lines = lines || this.lines || [];
-
-    lines.forEach(item => {
-      // 先判断是否是段落文本
-      if(state.type === 'block'){
-        index = item.indexOf(symbol);
-        // 如果没找到, 记录一下, 继续往下一行
-        if(index === -1){
-          text += '\n' + item;
-          return ;
-        } else {
-          // 如果找到, 将这一段截取出来.
-          tree.push({
-            index: 0,
-            symbol: '',
-            content: text + item.slice(0, index),
-            right: '',
-            left: ''
-          });
-          // 继续找剩下的
-          item = item.slice(index + symbol.length);
-        }
-      } 
-      list = item.match(/("|')/g) || [];
-      // 没找到字符串
-      if(list.length === 0){
-        if(item){
-          tree.push({
-            index: 0,
-            symbol: '',
-            content: '',
-            right: '',
-            left: item
-          })
-        } else {
-          tree.push({
-          });
-        }
-      // 找到一个
-      } else if(list.length === 1){
-        symbol = list[0];
-        state.type = 'block';
-        text = item.slice(item.indexOf(symbol));
-      // 找到多个
-      } else {
-        result = this.formatSymbol(item, list);
-        if (result[0]) {
-          state.type = 'block';
-          text = result[1].slice(-1)[0].right;
-        } else {
-          tree = tree.concat(result[1]);
-        }
-      }
-    });
-
-    return tree;
-  }
-  formatSymbol(text, list, lineno){
-    lineno = lineno || 0;
-    let symbol = '';
-    let symbolLen = 0;
-    let res;
-    let index;
-    let left;
-    let flag = true;
-    let result = [];
     let count = 0;
-    let content;
-    list.forEach(item => {
-      // 左引号
-      if(symbol === ''){
-        symbol = item;
-        symbolLen = symbol.length;
-        index = text.indexOf(symbol);
-        left = text.slice(0, index);
-        text = text.slice(index + symbol.length);
-        // 右引号
-      } else if(symbol === item){
-        // res = this.splitSymbol(text, symbol);
-        // left = res.left;
-        symbolLen = symbol.length;
-        index = text.indexOf(symbol);
-        content = text.slice(0, index);
-        result.push({
-          line: lineno,
-          index: count,
-          left: left,
-          content: content,
-          right: '',
-          symbol: symbol
-        });
-        symbol = '';
-      }
-      count += index + symbol.length;
+    lines.forEach(item => {
+      list.push(count);
+      count += item.length + 1;
     });
-
-    result.push({
-      line: lineno,
-      index: count,
-      left: '',
-      content: '',
-      right: text.slice(index + symbolLen),
-      symbol: symbol
-    });
-
-    // 如果 符号不是空的, 说明是在左引号前停止
-    return [
-      symbol,
-      result
-    ]
+    return list;
   }
-  splitSymbol (text, symbol){
-    let index = text.indexOf(symbol);
-    let nextIndex = text.slice(index + symbol.length).indexOf(symbol);
-    let left = text.slice(0, index);
-    let content = text.slice(index + symbol.length, nextIndex);
-    return {
-      index,
-      nextIndex,
-      left,
-      content,
-      symbol
-    };
+  parse(){
+    this.termsTree = this.buildTermsTree();
+    this.grammarTree = this.buildGrammarTree(this.termsTree, this.linenos)
+  }
+  buildTermsTree(content){
+    content = content || this.content || '';
+    let symbol;
+    let list = [];
+    let line = 0;
+    let count = 0;
+    let index = 0;
+    let type = '';
+    let text = '';
+    let len = content.length;
+    let map = {
+      '/*': {
+        left: '/*',
+        right: '*/'
+      },
+      '"':{
+        left: '"',
+        right: '"'
+      },
+      '\'':{
+        left: '\'',
+        right: '\''
+      }
+    }
+    // let reg = /(\s+|var\s|let\s|const\s|function|if|for|'|"|\{|\}|\(|\)|([\+\-\*\/><]|)=|:|\n|,|;|\/\*|\*\/|\/\/|\/|\+\+|--|={2,3}|\d+|\w+|\.)/g;
+    console.time('buildTermsTree');
+    let reg = /(var\s|let\s|const\s|function|if|for|\.|'|"|:|,|;|\{|\}|\(|\))|(==|[\+\-\*\/><=]|)=|\/\/|\/\*|\*\/|\n+/g
+    symbol = reg.exec(content);
+    while(symbol){
+      if(symbol[0].charAt(0) === '\n'){
+        list.push({
+          s: symbol[0],
+          i: symbol.index + count,
+          l: line
+        });
+        line += symbol[0].length;
+      } else {
+        if(type === ''){
+          if(symbol[0] === '\'' || symbol[0] === '\"' || symbol[0] === '/*'){
+            type = symbol[0];
+          } else {
+            list.push({
+              s: symbol[0],
+              i: symbol.index + count,
+              l: line
+            });
+          }
+        }
+        if(type !== ''){
+          if(map[type]){
+            // 基于左边界查找右边界
+            index = content.slice(symbol.index + type.length).indexOf(map[type].right);
+            if(index < 0){
+              // 无注释结束标记
+              if(type === '/*'){
+              // 无右引号标记
+              } else if(type === '"' || type === '\''){
+                debugger
+                throw(new Error('symbolError ' + type + 'at ' + line))
+              }
+              content = '';
+            } else {
+              // 右边界在content中的实际位置
+              index += symbol.index;
+              // 被左右边界包裹的内容
+              text = content.slice(symbol.index + type.length, index);
+              // 右边界后的内容
+              content = content.slice(index + type.length + map[type].right.length);
+              // 统计这一段落有多少行
+              line += (text.match(/\n/g) || []).length;
+              // 剩余字符的位置
+              count = len - content.length;
+              list.push({
+                s: type,
+                t: text,
+                i: count - text.length - type.length  - map[type].right.length,
+                l: line
+              });
+              type = '';
+              // 截取过字符串时, 需要对正则的索引进行重置
+              reg.lastIndex = 0;
+            }
+          }
+        }
+      }
+      symbol = reg.exec(content);
+    }
+    console.timeEnd('buildTermsTree');
+    return list;
+  }
+  restoreTermsTree(tree){
+    tree = tree || this.termsTree || [];
+    let content = '';
+    tree.forEach(item => {
+      content += item.s;
+    });
+    return content;
+  }
+  buildGrammarTree(tree, indexs){
+    tree = tree || this.termsTree || [];
+    indexs = indexs || this.linenos || [];
+    let current = 0;
+    let line = 0;
+    let len = tree.length;
+    let symbol;
+    let res = [];
+    while(current < len - 1){
+      symbol = tree[current++];
+      switch(symbol.s.charAt(0)){
+        case '\n':
+            line += symbol.s.length;
+          break;
+            break;
+        case 'f':
+            if(symbol.s === 'function'){
+              res = res.concat(this.parseFunction(tree.slice(current), (params, context, funcs) => {
+                let func = new _type__WEBPACK_IMPORTED_MODULE_0__["default"].Functions(params, context, current, symbol.l, symbol.i);
+                current += context[1];
+                return [func].concat(funcs);
+              }));
+            }
+            break;
+        default: break;
+      }
+    }
+    return res;
+  }
+  parseFunction(tree, cb){
+    let params = this.sreachBlock(tree, '(', ')', true);
+    let context = this.sreachBlock(tree, '{', '}', true);
+    return cb(params, context, this.buildGrammarTree(tree.slice.apply(tree, context)));
+  }
+  sreachBlock(tree = [], left, right, nest = false){
+    let len = tree.length;
+    let start = -1;
+    let count = 0;
+    let current = 0;
+    let isFound = false;
+    let symbol;
+    while(!isFound && current < len - 1){
+      symbol = tree[current];
+      if(symbol.s === left){
+        start < 0 && (start = current);
+        count++;
+      } else if(symbol.s === right) {
+        count--;
+      }
+      if(count === 0 && start >= 0){
+        isFound = true;
+      }
+      current++;
+    }
+    return [start, current];
   }
   // 左右空格
   trim(str){
@@ -1216,6 +1054,306 @@ class AST {
     return str.replace(/\s+$/, '');
   }
 }
+
+
+/***/ }),
+/* 3 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "SourceLocation", function() { return SourceLocation; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Position", function() { return Position; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Token", function() { return Token; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Identifier", function() { return Identifier; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Literal", function() { return Literal; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "RegExpLiteral", function() { return RegExpLiteral; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Programs", function() { return Programs; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Functions", function() { return Functions; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Statement", function() { return Statement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ExpressionStatement", function() { return ExpressionStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "EmptyStatement", function() { return EmptyStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "DebuggerStatement", function() { return DebuggerStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "WithStatement", function() { return WithStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ReturnStatement", function() { return ReturnStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "LabeledStatement", function() { return LabeledStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "BreakStatement", function() { return BreakStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ContinueStatement", function() { return ContinueStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "IfStatement", function() { return IfStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "SwitchStatement", function() { return SwitchStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "SwitchCase", function() { return SwitchCase; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ThrowStatement", function() { return ThrowStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "TryStatement", function() { return TryStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "CatchClause", function() { return CatchClause; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "WhileStatement", function() { return WhileStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "DoWhileStatement", function() { return DoWhileStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ForInStatement", function() { return ForInStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Declarations", function() { return Declarations; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "FunctionDeclaration", function() { return FunctionDeclaration; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "VariableDeclaration", function() { return VariableDeclaration; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "VariableDeclarator", function() { return VariableDeclarator; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Expressions", function() { return Expressions; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ThisExpression", function() { return ThisExpression; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ArrayExpression", function() { return ArrayExpression; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ObjectExpression", function() { return ObjectExpression; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Property", function() { return Property; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "FunctionExpression", function() { return FunctionExpression; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "UnaryExpression", function() { return UnaryExpression; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "UpdateOperator", function() { return UpdateOperator; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "BinaryExpression", function() { return BinaryExpression; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "AssignmentExpression", function() { return AssignmentExpression; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "AssignmentOperator", function() { return AssignmentOperator; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "MemberExpression", function() { return MemberExpression; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ConditionalExpression", function() { return ConditionalExpression; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "NewExpression", function() { return NewExpression; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "SequenceExpression", function() { return SequenceExpression; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "BlockStatement", function() { return BlockStatement; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Block", function() { return Block; });
+const SourceLocation  = function(){
+  
+}
+const Position  = function(){
+  
+}
+const Token = function(){
+  
+}
+const Identifier = function(){
+  
+}
+const Literal = function(){
+  
+}
+
+const RegExpLiteral = function(){
+  
+}
+const Programs = function(){
+  
+}
+const Functions = function(params, context, num, line, index){
+  this.params = params;
+  this.context = context;
+  this.num = num;
+  this.index = index;
+  this.line = line;
+  return this;
+}
+const Statement = function(){
+  
+}
+const ExpressionStatement = function(){
+
+  
+}
+
+const EmptyStatement = function(){
+
+  
+}
+
+const DebuggerStatement = function(){
+
+  
+}
+const WithStatement = function(){
+
+  
+}
+const ReturnStatement = function(){
+
+  
+}
+const LabeledStatement = function(){
+
+  
+}
+const BreakStatement = function(){
+
+  
+}
+const ContinueStatement = function(){
+
+  
+}
+const IfStatement = function(){
+
+  
+}
+const SwitchStatement = function(){
+
+  
+}
+const SwitchCase = function(){
+
+  
+}
+const ThrowStatement = function(){
+
+  
+}
+const TryStatement = function(){
+
+  
+}
+const CatchClause = function(){
+
+  
+}
+const WhileStatement = function(){
+
+  
+}
+const DoWhileStatement = function(){
+
+  
+}
+
+const ForInStatement = function(){
+
+  
+}
+const Declarations = function(){
+
+  
+}
+const FunctionDeclaration = function(){
+
+  
+}
+
+
+const VariableDeclaration = function(){
+
+  
+}
+
+
+const VariableDeclarator = function(){
+
+  
+
+}
+
+const Expressions = function(){
+
+}
+
+const ThisExpression = function(){
+
+  
+}
+const ArrayExpression = function(){
+
+  
+}
+const ObjectExpression = function(){
+
+  
+}
+
+const Property = function(){
+
+  
+}
+
+const FunctionExpression = function(){
+
+  
+}
+
+const UnaryExpression = function(){
+
+  
+}
+const UpdateOperator = function(){
+
+  
+}
+const BinaryExpression = function(){
+
+  
+}
+const AssignmentExpression = function(){
+
+  
+}
+const AssignmentOperator = function(){
+
+  
+}
+
+const MemberExpression = function(){
+
+  
+}
+const ConditionalExpression = function(){
+
+  
+}
+const NewExpression = function(){
+
+  
+}
+const SequenceExpression = function(){
+
+}
+const BlockStatement = function(){
+
+}
+const Block = function(){
+
+}
+
+/* harmony default export */ __webpack_exports__["default"] = ({
+  SourceLocation,
+  Position,
+  Block,
+  BlockStatement,
+  Token,
+  Identifier,
+  Literal,
+  RegExpLiteral,
+  Programs,
+  Functions,
+  Statement,
+  ExpressionStatement,
+  EmptyStatement,
+  DebuggerStatement,
+  WithStatement,
+  ReturnStatement,
+  LabeledStatement,
+  BreakStatement,
+  ContinueStatement,
+  IfStatement,
+  SwitchStatement,
+  SwitchCase,
+  ThrowStatement,
+  TryStatement,
+  CatchClause,
+  WhileStatement,
+  DoWhileStatement,
+  ForInStatement,
+  Declarations,
+  FunctionDeclaration,
+  VariableDeclaration,
+  VariableDeclarator,
+  Expressions,
+  ThisExpression,
+  ArrayExpression,
+  ObjectExpression,
+  Property,
+  FunctionExpression,
+  UnaryExpression,
+  UpdateOperator,
+  BinaryExpression,
+  AssignmentExpression,
+  AssignmentOperator,
+  MemberExpression,
+  ConditionalExpression,
+  NewExpression,
+  SequenceExpression
+});
 
 
 /***/ })
