@@ -1,3 +1,4 @@
+
 export class AST {
   constructor(sentence){
     this.logs = [];
@@ -17,11 +18,15 @@ export class AST {
   }
   parse(){
     this.terms();
-    this.grammar(this.termsTree);
+    // this.grammar(this.termsTree);
   }
   terms(){
     this.lines = this.annotation(this.lines);
+    // this.termsTree = this.parseTermsTree(this.lines);
     this.termsTree = this.buildTermsTree(this.lines);
+  }
+  parseTermsTree(lines){
+    return '';
   }
   grammar(lines){
     let content = '__C__';
@@ -122,7 +127,6 @@ export class AST {
   }
   buildTermsTree(lines){
     let stringTree = this.formatString(lines);
-
     return stringTree
   }
   createRegExp(map, mode){
@@ -146,8 +150,8 @@ export class AST {
   formatString(lines, map){
     map = map || {
       '\'': '\'',
-      '"': '"',
-      '{': '}'
+      '"': '"'
+      // ,'{': '}'
     }
     lines = lines || this.lines || [];
     let symbol;
@@ -157,13 +161,13 @@ export class AST {
     let symbols = [];
     let text = '';
     let blockno = 0;
+    let count = 0;
     let reg = this.createRegExp(map, 'g');
-    // let reg = /('|"|{|})/g;
+
     lines.forEach((item, lineno) => {
       if (item) {
         reg.lastIndex = 0;
         symbols = item.match(reg) || [];
-
         if(symbols.length === 0){
           if(type === 'block'){
             text += '\n' + item;
@@ -240,7 +244,8 @@ export class AST {
               type: type,
               t:4
             });
-            text += item.slice(item.indexOf(symbol) + map[symbol].length);
+            // map[symbol]
+            text += item.slice(item.indexOf(symbol) + symbol.length);
           }
         // 找到多个
         } else {
@@ -255,11 +260,11 @@ export class AST {
           }
           list.push(result[1]);
         }
-      } else {
-        // list.push([]);
       }
     });
-    if(type === 'block'){
+    // 符号没有闭合
+    if(symbol !== ''){
+      
     }
     return list;
   }
@@ -374,3 +379,4 @@ export class AST {
     return str.replace(/\s+$/, '');
   }
 }
+
