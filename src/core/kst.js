@@ -53,7 +53,7 @@ export class AST {
         right: '\''
       }
     }
-    // let reg = /(\s+|var\s|let\s|const\s|function|if|for|'|"|\{|\}|\(|\)|([\+\-\*\/><]|)=|:|\n|,|;|\/\*|\*\/|\/\/|\/|\+\+|--|={2,3}|\d+|\w+|\.)/g;
+    
     console.time('buildTermsTree');
     let reg = /(var\s|let\s|const\s|function|if|for|\.|'|"|:|,|;|\{|\}|\(|\))|(==|[\+\-\*\/><=]|)=|\/\/|\/\*|\*\/|\n+/g
     symbol = reg.exec(content);
@@ -130,24 +130,46 @@ export class AST {
   buildGrammarTree(tree, indexs){
     tree = tree || this.termsTree || [];
     indexs = indexs || this.linenos || [];
+    let len = tree.length;
     let current = 0;
     let line = 0;
-    let len = tree.length;
     let symbol;
     let res = [];
+    let cTree; // 子树
     while(current < len - 1){
       symbol = tree[current++];
       switch(symbol.s.charAt(0)){
         case '\n':
             line += symbol.s.length;
           break;
-            break;
+        case 'v':
+        case 'c':
+        case 'l':
+          if(/var|const|let/.test(symbol.s)){
+            cTree = tree.slice(current - 1)
+            res = res.concat(this.parseStatement(cTree, (type, context, line) => {
+              if(line.length){
+                console.log(line)
+                let sent = this.fetchContent(line);// this.content.slice(line[0].i, line[line.length-1].i);
+                return new TYPE.Statement(type, sent, current, symbol.l, symbol.i, line);
+              }
+              return [];
+            }));
+          }
+          break;
         case 'f':
             if(symbol.s === 'function'){
-              res = res.concat(this.parseFunction(tree.slice(current), (params, context, funcs) => {
-                let func = new TYPE.Functions(params, context, current, symbol.l, symbol.i);
-                current += context[1];
-                return [func].concat(funcs);
+              cTree = tree.slice(current);
+              res = res.concat(this.parseFunction(cTree, (params, context, end, paramsBody, contextBody) => {
+                let func = new TYPE.Functions(
+                  'function', 
+                  this.parseParams(params, paramsBody, current), 
+                  this.parseContext(context, contextBody, current), 
+                  current, symbol.l, symbol.i
+                );
+                func.child = this.buildGrammarTree(contextBody);
+                current += end;
+                return func;
               }));
             }
             break;
@@ -156,32 +178,93 @@ export class AST {
     }
     return res;
   }
-  parseFunction(tree, cb){
-    let params = this.sreachBlock(tree, '(', ')', true);
-    let context = this.sreachBlock(tree, '{', '}', true);
-    return cb(params, context, this.buildGrammarTree(tree.slice.apply(tree, context)));
+  /**
+   * 取出内容
+   * @param {array} line 首尾行
+   * @param {boolean} contain 是否包含边界符
+   */
+  fetchContent(line, contain = true){
+    let start = line[0];
+    let end = line[line.length-1];
+    return this.content.slice(
+      contain ? start.i : start.i + start.s.length,
+      contain ? end.i : end.i - end.s.length -  start.s.length
+    )
   }
-  sreachBlock(tree = [], left, right, nest = false){
+  parseParams(line, paramsBody, current){
+    return {
+      line: line,
+      index: current,
+      body: this.fetchContent(paramsBody, false)
+    };
+  }
+  parseContext(line, contextBody, current){
+    return {
+      line: line,
+      index: current,
+      body: this.fetchContent(contextBody, false)
+    };
+  }
+  parseStatement(tree, cb){
+    let type = tree[0].s;
+    let content = this.sreachBlock(tree, type, /(\,|;|\n)/g, false, (current) => {
+      return [];
+    });
+    return cb(type, content, tree.slice.apply(tree, content));
+  }
+  /**
+   * 
+   * @param {array} tree 查找树
+   * @param {function} cb 回调
+   */
+  parseFunction(tree, cb){
+    let params = this.sreachBlock(tree, /\(/, /\)/, true);
+    let context = this.sreachBlock(tree, /\{/, /\}/, true);
+    let end = context[1];
+    // 
+    return cb(params, context, end, tree.slice.apply(tree, params), tree.slice.apply(tree, context));
+  }
+  /**
+   * 
+   * @param {array} tree 查找树
+   * @param {string|RegExp} left 左边界
+   * @param {string|RegExp} right 右边界
+   * @param {boolean} nest 是否为嵌套
+   * @param {function} error 不为嵌套, 且找到两个连续的左边界符时 
+   */
+  sreachBlock(tree = [], left, right, nest = false, error){
+
     let len = tree.length;
     let start = -1;
     let count = 0;
     let current = 0;
     let isFound = false;
     let symbol;
-    while(!isFound && current < len - 1){
+    let isError = false;
+    // 如果不是字符串, 需传正则
+    let leftReg = typeof left === 'string' ? new RegExp(left, 'g'): left;
+    let rightReg = typeof right === 'string' ? new RegExp(right, 'g'): right;
+    while(!isError && !isFound && current < len - 1){
       symbol = tree[current];
-      if(symbol.s === left){
-        start < 0 && (start = current);
+      if(leftReg.test(symbol.s)){
+        if(start<0){
+          start = current
+        } else {
+          if(!nest){
+            isError = true;
+          }
+        }
         count++;
-      } else if(symbol.s === right) {
+      } else if(rightReg.test(symbol.s)) {
         count--;
       }
       if(count === 0 && start >= 0){
         isFound = true;
+      } else {
       }
       current++;
     }
-    return [start, current];
+    return isError ? error && error(current) : [start, current];
   }
   // 左右空格
   trim(str){
