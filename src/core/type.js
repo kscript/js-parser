@@ -20,6 +20,10 @@ export const RegExpLiteral = function(){
 export const Programs = function(){
   
 }
+export const Bracket = function(content, block){
+  this.block = block;
+  this.content = content;
+}
 export const FunctionParams = function(block, body = ''){
   this.block = block;
   this.body = body;
@@ -210,8 +214,19 @@ export const BlockStatement = function(){
 export const Block = function(){
 
 }
+export const StatementLeft = function(block, content){
+  this.content = content;
+  this.block = block;
+}
+export const StatementRight = function(block, content){
+  this.content = content;
+  this.block = block;
+}
 
 export default {
+  Bracket,
+  StatementLeft,
+  StatementRight,
   SourceLocation,
   Position,
   Block,
