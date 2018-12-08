@@ -20,8 +20,18 @@ export const RegExpLiteral = function(){
 export const Programs = function(){
   
 }
-export const Functions = function(type, params, context, treeno, symbol){
+export const FunctionParams = function(block, body = ''){
+  this.block = block;
+  this.body = body;
+}
+
+export const FunctionContext = function(block, body = ''){
+  this.block = block;
+  this.body = body;
+} 
+export const Functions = function(type, name, params, context, treeno, symbol){
   this.type = type;
+  this.name = name;
   this.params = params;
   this.context = context;
   this.treeno = treeno;
@@ -29,8 +39,9 @@ export const Functions = function(type, params, context, treeno, symbol){
   this.index = symbol.i;
   return this;
 }
-export const Statement = function(type, body, block, treeno, symbol){
+export const Statement = function(type, name, body, block, treeno, symbol){
   this.type = type;
+  this.name = name;
   this.body = body;
   this.block = block;
   this.treeno = treeno;
@@ -247,5 +258,7 @@ export default {
   MemberExpression,
   ConditionalExpression,
   NewExpression,
-  SequenceExpression
+  SequenceExpression,
+  FunctionParams,
+  FunctionContext
 }

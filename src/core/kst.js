@@ -150,9 +150,10 @@ export class AST {
             cTree = tree.slice(current);
             res = res.concat(this.parseStatement(cTree, (type, context, line) => {
               type = type.slice(0, -1);
+              let block = this.realLine(context, realno);
               if(line.length){
-                let body = this.fetchContent(line);
-                return new TYPE.Statement(type, body, this.realLine(context, realno), realno, symbol);
+                let body = this.fetchContent2(block);
+                return new TYPE.Statement(type, '', body, block, realno, symbol);
               }
               return [];
             }));
@@ -161,11 +162,13 @@ export class AST {
         case 'f':
             if(symbol.s === 'function'){
               cTree = tree.slice(current);
-              res = res.concat(this.parseFunction(cTree, (params, context) => {
+              res = res.concat(this.parseFunction(cTree, (name, params, context) => {
+
                 let func = new TYPE.Functions(
                   'function', 
-                  this.parseParams(this.realLine(params, realno)), 
-                  this.parseContext(this.realLine(context, realno)), 
+                  this.parseName(this.realLine(name, realno)),
+                  this.parseParams(this.realLine(params, realno)),
+                  this.parseContext(this.realLine(context, realno)),
                   realno,
                   symbol
                 );
@@ -194,17 +197,25 @@ export class AST {
       contain ? end.i : end.i - end.s.length -  start.s.length
     )
   }
+  fetchContent2(line){
+    let start = this.termsTree[line[0]];
+    let end = this.termsTree[line[line.length-1]];
+    return this.content.slice(start.i + start.s.length, end.i);
+  }
   parseParams(block){
-    return {
-      block: block,
-      body: this.fetchContent(this.termsTree.slice.apply(this.termsTree, block), false)
-    };
+    return new TYPE.FunctionParams(
+      block,
+      this.fetchContent2(block, false)
+    );
   }
   parseContext(block){
-    return {
-      block: block,
-      body: this.fetchContent(this.termsTree.slice.apply(this.termsTree, block), false)
-    };
+    return new TYPE.FunctionContext(
+      block
+      // this.fetchContent2(block, false)
+    );
+  }
+  parseName(block){
+    return this.trim(this.fetchContent2(block, false));
   }
   parseStatement(tree, cb){
     let type = tree[0].s;
@@ -219,9 +230,10 @@ export class AST {
    * @param {function} cb 回调
    */
   parseFunction(tree, cb){
+    let name = this.sreachBlock(tree, /function/, /\(/, true);
     let params = this.sreachBlock(tree, /\(/, /\)/, true);
     let context = this.sreachBlock(tree, /\{/, /\}/, true);
-    return cb(params, context, tree.slice.apply(tree, params), tree.slice.apply(tree, context));
+    return cb(name, params, context, tree.slice.apply(tree, params), tree.slice.apply(tree, context));
   }
   
   realLine(line, current){
