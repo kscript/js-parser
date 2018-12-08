@@ -64,7 +64,7 @@
 /******/
 /******/ 	var hotApplyOnUpdate = true;
 /******/ 	// eslint-disable-next-line no-unused-vars
-/******/ 	var hotCurrentHash = "187c3fd1f686ce2eae16";
+/******/ 	var hotCurrentHash = "756a30d0edf7986e4b0a";
 /******/ 	var hotRequestTimeout = 10000;
 /******/ 	var hotCurrentModuleData = {};
 /******/ 	var hotCurrentChildModule;
@@ -824,6 +824,7 @@ function a(){
     console.log(i)
   }
   function b(){
+    var c = 2;
     return 111
   }
   return function(){
@@ -882,7 +883,7 @@ class AST {
   }
   parse(){
     this.termsTree = this.buildTermsTree();
-    this.grammarTree = this.buildGrammarTree(this.termsTree, this.linenos)
+    this.grammarTree = this.buildGrammarTree(this.termsTree, 0);
   }
   buildTermsTree(content){
     content = content || this.content || '';
@@ -982,17 +983,18 @@ class AST {
     });
     return content;
   }
-  buildGrammarTree(tree, indexs){
+  buildGrammarTree(tree, no){
     tree = tree || this.termsTree || [];
-    indexs = indexs || this.linenos || [];
     let len = tree.length;
     let current = 0;
     let line = 0;
     let symbol;
     let res = [];
     let cTree; // 子树
+    let realno;
     while(current < len - 1){
-      symbol = tree[current++];
+      symbol = tree[current];
+      realno = current + no;
       switch(symbol.s.charAt(0)){
         case '\n':
             line += symbol.s.length;
@@ -1001,12 +1003,12 @@ class AST {
         case 'c':
         case 'l':
           if(/var|const|let/.test(symbol.s)){
-            cTree = tree.slice(current - 1)
+            cTree = tree.slice(current);
             res = res.concat(this.parseStatement(cTree, (type, context, line) => {
+              type = type.slice(0, -1);
               if(line.length){
-                console.log(line)
-                let sent = this.fetchContent(line);// this.content.slice(line[0].i, line[line.length-1].i);
-                return new _type__WEBPACK_IMPORTED_MODULE_0__["default"].Statement(type, sent, current, symbol.l, symbol.i, line);
+                let body = this.fetchContent(line);
+                return new _type__WEBPACK_IMPORTED_MODULE_0__["default"].Statement(type, body, this.realLine(context, realno), realno, symbol);
               }
               return [];
             }));
@@ -1015,27 +1017,29 @@ class AST {
         case 'f':
             if(symbol.s === 'function'){
               cTree = tree.slice(current);
-              res = res.concat(this.parseFunction(cTree, (params, context, end, paramsBody, contextBody) => {
+              res = res.concat(this.parseFunction(cTree, (params, context) => {
                 let func = new _type__WEBPACK_IMPORTED_MODULE_0__["default"].Functions(
                   'function', 
-                  this.parseParams(params, paramsBody, current), 
-                  this.parseContext(context, contextBody, current), 
-                  current, symbol.l, symbol.i
+                  this.parseParams(this.realLine(params, realno)), 
+                  this.parseContext(this.realLine(context, realno)), 
+                  realno,
+                  symbol
                 );
-                func.child = this.buildGrammarTree(contextBody);
-                current += end;
+                func.child = this.buildGrammarTree(cTree.slice.apply(cTree, context), realno + context[0]);
+                current += context[1];
                 return func;
               }));
             }
             break;
         default: break;
       }
+      current++;
     }
     return res;
   }
   /**
    * 取出内容
-   * @param {array} line 首尾行
+   * @param {array} line 边界符首尾行
    * @param {boolean} contain 是否包含边界符
    */
   fetchContent(line, contain = true){
@@ -1046,18 +1050,16 @@ class AST {
       contain ? end.i : end.i - end.s.length -  start.s.length
     )
   }
-  parseParams(line, paramsBody, current){
+  parseParams(block){
     return {
-      line: line,
-      index: current,
-      body: this.fetchContent(paramsBody, false)
+      block: block,
+      body: this.fetchContent(this.termsTree.slice.apply(this.termsTree, block), false)
     };
   }
-  parseContext(line, contextBody, current){
+  parseContext(block){
     return {
-      line: line,
-      index: current,
-      body: this.fetchContent(contextBody, false)
+      block: block,
+      body: this.fetchContent(this.termsTree.slice.apply(this.termsTree, block), false)
     };
   }
   parseStatement(tree, cb){
@@ -1075,9 +1077,13 @@ class AST {
   parseFunction(tree, cb){
     let params = this.sreachBlock(tree, /\(/, /\)/, true);
     let context = this.sreachBlock(tree, /\{/, /\}/, true);
-    let end = context[1];
-    // 
-    return cb(params, context, end, tree.slice.apply(tree, params), tree.slice.apply(tree, context));
+    return cb(params, context, tree.slice.apply(tree, params), tree.slice.apply(tree, context));
+  }
+  
+  realLine(line, current){
+    return (line || []).map(item => {
+      return item + current;
+    })
   }
   /**
    * 
@@ -1116,8 +1122,8 @@ class AST {
       if(count === 0 && start >= 0){
         isFound = true;
       } else {
+        current++;
       }
-      current++;
     }
     return isError ? error && error(current) : [start, current];
   }
@@ -1214,21 +1220,22 @@ const RegExpLiteral = function(){
 const Programs = function(){
   
 }
-const Functions = function(type, params, context, num, line, index){
+const Functions = function(type, params, context, treeno, symbol){
   this.type = type;
   this.params = params;
   this.context = context;
-  this.num = num;
-  this.index = index;
-  this.line = line;
+  this.treeno = treeno;
+  this.lineno = symbol.l;
+  this.index = symbol.i;
   return this;
 }
-const Statement = function(type, sent, num, line, index, block){
+const Statement = function(type, body, block, treeno, symbol){
   this.type = type;
-  this.sent = sent;
-  this.num = num;
-  this.line = line;
+  this.body = body;
   this.block = block;
+  this.treeno = treeno;
+  this.lineno = symbol.l;
+  this.index = symbol.i;
 }
 const ExpressionStatement = function(){
 

@@ -20,16 +20,22 @@ export const RegExpLiteral = function(){
 export const Programs = function(){
   
 }
-export const Functions = function(params, context, num, line, index){
+export const Functions = function(type, params, context, treeno, symbol){
+  this.type = type;
   this.params = params;
   this.context = context;
-  this.num = num;
-  this.index = index;
-  this.line = line;
+  this.treeno = treeno;
+  this.lineno = symbol.l;
+  this.index = symbol.i;
   return this;
 }
-export const Statement = function(){
-  
+export const Statement = function(type, body, block, treeno, symbol){
+  this.type = type;
+  this.body = body;
+  this.block = block;
+  this.treeno = treeno;
+  this.lineno = symbol.l;
+  this.index = symbol.i;
 }
 export const ExpressionStatement = function(){
 

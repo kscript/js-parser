@@ -13,6 +13,7 @@ function a(){
     console.log(i)
   }
   function b(){
+    var c = 2;
     return 111
   }
   return function(){
@@ -21,10 +22,10 @@ function a(){
 }
 var c = '
 1
-3
+3'
 var d
 var e = ;
-var f= '
+var f= 
 /*
 var g = 4;
 *//*1*//*222*/123
