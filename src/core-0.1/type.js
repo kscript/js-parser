@@ -24,19 +24,20 @@ export const Bracket = function(content, block){
   this.block = block;
   this.content = content;
 }
-export const FunctionParams = function(block, body = '', child){
+export const FunctionParams = function(block, body = '', child = []){
   this.block = block;
   this.body = body;
   this.child = child;
 }
 
-export const FunctionContext = function(block, body = '', child){
+export const FunctionContext = function(block, body = '', child = []){
   this.block = block;
   this.body = body;
   this.child = child;
 } 
 export const Functions = function(type, name, params, context, treeno, symbol){
   this.type = type;
+  this.s = type;
   this.name = name;
   this.params = params;
   this.context = context;
@@ -45,7 +46,7 @@ export const Functions = function(type, name, params, context, treeno, symbol){
   this.index = symbol.i;
   return this;
 }
-export const Statement = function(type, name, body, block, treeno, symbol){
+export const Statement2 = function(type, name, body, block, treeno, symbol){
   this.type = type;
   this.name = name;
   this.body = body;
@@ -53,6 +54,9 @@ export const Statement = function(type, name, body, block, treeno, symbol){
   this.treeno = treeno;
   this.lineno = symbol.l;
   this.index = symbol.i;
+}
+export const Statement = function(content){
+  this.content = content;
 }
 export const ExpressionStatement = function(){
 
@@ -224,9 +228,27 @@ export const StatementRight = function(block, content){
   this.content = content;
   this.block = block;
 }
+export const StringBlock = function(symbol, realno){
+  this.s = symbol.s;
+  this.type = symbol.s;
+  this.body = symbol.t;
+  this.treeno = realno;
+  this.lineno = symbol.l;
+  this.index = symbol.i;
+}
+export const AnnotationBlock = function(symbol, realno){
+  this.s = symbol.s;
+  this.type = symbol.s;
+  this.body = symbol.t;
+  this.treeno = realno;
+  this.lineno = symbol.l;
+  this.index = symbol.i;
+}
 
 export default {
   Bracket,
+  StringBlock,
+  AnnotationBlock,
   StatementLeft,
   StatementRight,
   SourceLocation,

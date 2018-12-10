@@ -45,10 +45,10 @@ export class Core {
    * @param {Array} tree 查找树
    * @param {String|RegExp} left 左边界
    * @param {String|RegExp} right 右边界
-   * @param {Boolean=} nest 是否为嵌套
+   * @param {string=} mode 嵌套模式 block(固定匹配左右: {}) | nest(可以嵌套: a={b:{}}) | ignore(忽略多余左边界符) var a \n\n var b
    * @param {Function=} error 不为嵌套, 且找到两个连续的左边界符时
    */
-  searchBlockDiff(tree = [], leftReg, rightReg, nest = true, error){
+  searchBlockDiff(tree = [], leftReg, rightReg, mode = 'block', error){
 
     // 根据正负, 可以反映出 左右边界出现次数
     let count = 0;
@@ -62,12 +62,14 @@ export class Core {
 
     let len = tree.length;
     let current = 0;
-
     while (!isError && !isFound && current < len - 1) {
       right = current;
       let symbol = tree[current];
-
+      if(mode === 'ignore'){
+        // console.log(symbol, left);
+      }
       // 先查找左边界符
+      // 不为忽略模式, 需要一直判断左边界符
       if (leftReg.test(symbol.s)) {
         // 找到第一个
         if (left < 0) {
@@ -75,13 +77,16 @@ export class Core {
         // 找到第二个
         } else {
           // 如果不允许嵌套, 则报错. 
-          if (!nest) {
+          if (mode === 'block') {
             isError = true;
           }
         }
         count += 1;
       } else if (rightReg.test(symbol.s)) {
         count -= 1;
+        if(left >= 0 && mode === 'ignore'){
+          isFound = true;
+        }
       }
       // 如果存在左边界符, 且找到了右边界符, 则任务完成~
       if (left >= 0 && count === 0) {
@@ -94,7 +99,7 @@ export class Core {
   }
   /**
    * 取出内容
-   * @param {array} block 截取范围
+   * @param {Array} block 截取范围
    */
   fetchContent(block, left = 0, right = 0){
     try{
@@ -107,12 +112,14 @@ export class Core {
   }
   /**
    * 取出词法树
-   * @param {array} block 截取范围
+   * @param {Array} tree 指定要截取的树
+   * @param {Array} block 截取范围
    */
-  fetchTree(block){
+  fetchTree(tree, block){
+    tree = tree || this.termsTree || [];
     let start = block[0];
     let end = block[block.length-1] + 1;
-    return this.termsTree.slice(start, end);
+    return tree.slice(start, end);
   }
   verify(str){
     return str = typeof str === 'string'? str : '';

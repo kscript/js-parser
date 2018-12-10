@@ -6,7 +6,7 @@ let sent = `
 var a = "var a = '1'",
 b = 2;
 var $b1 =  ;"  var ds;"
-function a(){
+var ss = function a(){
   console.log(1);
 
   for(var i = 0; i<= 10; i++){
@@ -26,6 +26,8 @@ var c = '
 var d
 var e = ;
 var f= 
+var g
+var h
 /*
 var g = 4;
 *//*1*//*222*/123

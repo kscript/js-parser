@@ -64,7 +64,7 @@
 /******/
 /******/ 	var hotApplyOnUpdate = true;
 /******/ 	// eslint-disable-next-line no-unused-vars
-/******/ 	var hotCurrentHash = "aca1c6a0366fe93109ba";
+/******/ 	var hotCurrentHash = "0024ea1c920618b99444";
 /******/ 	var hotRequestTimeout = 10000;
 /******/ 	var hotCurrentModuleData = {};
 /******/ 	var hotCurrentChildModule;
@@ -817,7 +817,7 @@ let sent = `
 var a = "var a = '1'",
 b = 2;
 var $b1 =  ;"  var ds;"
-function a(){
+var ss = function a(){
   console.log(1);
 
   for(var i = 0; i<= 10; i++){
@@ -837,6 +837,8 @@ var c = '
 var d
 var e = ;
 var f= 
+var g
+var h
 /*
 var g = 4;
 *//*1*//*222*/123
@@ -871,6 +873,9 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "AST", function() { return AST; });
 /* harmony import */ var _core__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(3);
 /* harmony import */ var _type__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(4);
+/* harmony import */ var ansi_colors__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(5);
+/* harmony import */ var ansi_colors__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(ansi_colors__WEBPACK_IMPORTED_MODULE_2__);
+
 
 
 
@@ -891,6 +896,34 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
 
     // 语法树
     this.grammarTree = [];
+
+    // 定义左右边界符, 配合type使用
+    this.ambitMap = {
+      '/*': {
+        left: '/*',
+        right: '*/'
+      },
+      '/': {
+        left: '/',
+        right: '/'
+      },
+      '(': {
+        left: '(',
+        right: ')'
+      },
+      ')': {
+        left: '(',
+        right: ')'
+      },
+      '"':{
+        left: '"',
+        right: '"'
+      },
+      '\'':{
+        left: '\'',
+        right: '\''
+      }
+    }
 
     // 调用解析器
     this.parse();
@@ -921,33 +954,11 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
     let text = '';
     // 截取位置
     let cutIndx = 0;
-    // 定义左右边界符, 配合type使用
-    let map = {
-      '/*': {
-        left: '/*',
-        right: '*/'
-      },
-      '(': {
-        left: '(',
-        right: ')'
-      },
-      ')': {
-        left: '(',
-        right: ')'
-      },
-      '"':{
-        left: '"',
-        right: '"'
-      },
-      '\'':{
-        left: '\'',
-        right: '\''
-      }
-    }
+    
     console.time('buildTermsTree');
 
     // 一些关键词, 包括: 声明/函数/判断/循环/分语句/条件/注释
-    let reg = /(var\s|let\s|const\s|function|if|for|\.|'|"|:|,|;|\{|\}|\(|\))|(==|[\+\-\*\/><=]|)=|\/\/|\/\*|\*\/|\n+/g;
+    let reg = /(var\s|let\s|const\s|function|if|for|\.|\'|\"|:|,|;|\{|\}|\(|\))|(==|[\+\-\*\/><=]|)=|\/(\/|\*)|\n+/g;
 
     while(symbol = reg.exec(content)){
       // 如果是换行, 记录一下行数
@@ -962,7 +973,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
       } else {
         // 没有左边界符时
         if(type === ''){
-          if(type === '"' || type === '\'' || symbol[0] === '/*'){
+          if(symbol[0] === '"' || symbol[0] === '\'' || symbol[0] === '/*' || symbol[0] === '/'){
             type = symbol[0];
           } else {
             list.push({
@@ -976,37 +987,46 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
         // 这里的判断, 与上一个不是互斥关系, 不能使用 else if
         // (为了逻辑清晰, 从上一个条件语句中分离, 实际上也可以合并);
 
-        if(type !== '' && map[type]){
+        if(type !== '' && this.ambitMap[type]){
+          let block = content.slice(symbol.index + type.length);
           // 基于左边界查找右边界
-          let index = content.slice(symbol.index + type.length).indexOf(map[type].right);
+          let index = block.indexOf(this.ambitMap[type].right);
+          if(type === '/'){
+            index = (block.match(/([^\\])\/|\n/g) || []).index || -1;
+            // console.log(index);
+            // 找右边界符前, 先找到了换行符
+            if(index >= 0 && block.charAt(index) === '\n'){
+              throw(new Error('Invalid regular expression: missing /'))
+            }
+          }
           if(index < 0){
-            // 无注释结束标记, 后面的内容视为注释              
+            // 无注释结束标记, 后面的内容视为注释
             if(type === '/*'){
             
-            // 无右引号标记, 报错
-            } else if(type === '"' || type === '\'' ){
+            // 无正则右边界符, 报错
+            } else if(type === '/'){
+              
+            }else if(type === '"' || type === '\'' ){
               debugger
               throw(new Error('symbolError ' + type + 'at ' + line))
             }
             content = '';
           } else {
-
             // 右边界在content中的实际位置
-            index += symbol.index;
+            // index += symbol.index;
+            
             // 被左右边界包裹的内容
-            text = content.slice(symbol.index + type.length, index);
+            text = block.slice(0, index);
             // 截取右边界后的内容作为新的content
-            content = content.slice(index + type.length + map[type].right.length);
-
+            content = block.slice(index + this.ambitMap[type].right.length);
             // 统计这一段落有多少行
             line += (text.match(/\n/g) || []).length;
             // 剩余字符的位置
             cutIndx = len - content.length;
-
             list.push({
               s: type,
               t: text,
-              i: cutIndx - text.length - type.length  - map[type].right.length,
+              i: cutIndx - text.length - type.length  - this.ambitMap[type].right.length,
               l: line
             });
             type = '';
@@ -1016,6 +1036,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
         }
       }
     }
+
     console.timeEnd('buildTermsTree');
     return list;
   }
@@ -1025,8 +1046,11 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
    */
   buildGrammarTree(tree, no = 0){
     tree = tree || this.termsTree || [];
-    // 收敛函数块
-    tree = this.convergenceFunction(tree, no);
+    // 收敛代码片段
+    tree = this.convergenceSnippet(tree, no);
+    // console.log(tree);
+    // 收敛声明
+    tree = this.convergenceStatement(tree, no);
     return tree;
   }
   /**
@@ -1047,16 +1071,17 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
       if (symbol.s === 'function') {
         let cTree = tree.slice(current);
         list.push(this.parseFunction(cTree, (name, params, context) => {
+          let block = this.realLine(context, realno);
           // 创建一个函数类型类
           let func = new _type__WEBPACK_IMPORTED_MODULE_1__["default"].Functions(
             'function', 
             this.parseName(this.realLine(name, realno)),
             this.parseParams(this.realLine(params, realno)),
-            this.parseContext(this.realLine(context, realno)),
+            this.parseContext(block),
             realno,
             symbol
           );
-          // func.child = this.convergenceFunction(cTree.slice.apply(cTree, context), realno + context[0]);
+          func.child = this.buildGrammarTree(this.fetchTree(this.termsTree, block), block[0]);
           current += context[1];
           return func;
         }));
@@ -1068,14 +1093,96 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
     return list;
   }
   /**
+   * 收敛代码片段
+   * @param {Array} tree 词法树片段
+   * @param {number} no 词法树片段 在 AST词法树 的位置
+   */
+  convergenceSnippet(tree, no = 0){
+    tree = tree || this.termsTree || [];
+    let list = [];
+    let symbol;
+    let current = 0;
+    let len = tree.length;
+    let realno;
+    while (current < len) {
+      symbol = tree[current];
+      realno = current + no;
+      if (symbol.s === 'function') {
+        let cTree = tree.slice(current);
+        list.push(this.parseFunction(cTree, (name, params, context) => {
+          let block = this.realLine(context, realno);
+          // 创建一个函数类型类
+          let func = new _type__WEBPACK_IMPORTED_MODULE_1__["default"].Functions(
+            'function', 
+            this.parseName(this.realLine(name, realno)),
+            this.parseParams(this.realLine(params, realno)),
+            this.parseContext(block),
+            realno,
+            symbol
+          );
+          func.child = this.buildGrammarTree(this.fetchTree(cTree, context), block[0]);
+          current += context[1];
+          return func;
+        }));
+      } else if(/(\'|\")/.test(symbol.s)){
+        list.push(new _type__WEBPACK_IMPORTED_MODULE_1__["default"].StringBlock(symbol, realno));
+      } else if(symbol.s === '/*'){
+        list.push(new _type__WEBPACK_IMPORTED_MODULE_1__["default"].AnnotationBlock(symbol, realno));
+      } else {
+        list.push(symbol);
+      }
+      current += 1;
+    }
+    return list;
+  }
+  /**
+   * 收敛声明
+   * @param {Array} tree 词法树片段
+   * @param {number} no 词法树片段 在 AST词法树 的位置
+   */
+  convergenceStatement(tree, no = 0){
+    tree = tree || this.termsTree || [];
+    let list = [];
+    let symbol;
+    let current = 0;
+    let len = tree.length;
+    let realno;
+    while (current < len) {
+      symbol = tree[current];
+      realno = current + no;
+      if (/(var|let|const)/.test(symbol.s)) {
+        let cTree = tree.slice(current);
+        list = list.concat(this.parseStatement(cTree, (content) => {
+          let statement = [];
+          let end = content.length ? content[content.length - 1] : [0, 0];
+          content.forEach(item => {
+            this.splitStatement(this.fetchTree(cTree, item), () => {
+              // statement.push(new TYPE.Statement(type, left, right, symbol));
+            });
+            statement.push(new _type__WEBPACK_IMPORTED_MODULE_1__["default"].Statement(this.fetchTree(cTree, item)));
+          });
+          current += end[1];
+          return statement;
+        }));
+      } else {
+        list.push(symbol);
+      }
+      current += 1;
+    }
+    return list;
+  }
+  splitStatement(tree, cb){
+    // console.log(tree);
+  }
+  /**
    *  分析函数块
    * @param {Array} tree 查找树
    * @param {Function} cb 回调函数
    */
   parseFunction(tree, cb){
-    let name = this.searchBlockDiff(tree, /function/, /\(/, true);
-    let params = this.searchBlockDiff(tree, /\(/, /\)/, true);
-    let context = this.realLine(this.searchBlockDiff(tree.slice(params[1]), /\{/, /\}/, true), params[1]);
+    let name = this.searchBlockDiff(tree, /function/, /\(/, 'block');
+    let params = this.searchBlockDiff(tree, /\(/, /\)/, 'nest', ()=>{});
+    let context = this.realLine(this.searchBlockDiff(tree.slice(params[1]), /\{/, /\}/, 'nest'), params[1]);
 
     return cb(name, params, context);
   }
@@ -1085,17 +1192,52 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
   parseParams(block){
     return new _type__WEBPACK_IMPORTED_MODULE_1__["default"].FunctionParams(
       block,
-      '',
-      this.buildGrammarTree(this.fetchTree(block), block[0])
+      ''
     );
   }
   parseContext(block){
     return new _type__WEBPACK_IMPORTED_MODULE_1__["default"].FunctionContext(
       block,
-      '',
-      this.buildGrammarTree(this.fetchTree(block), block[0])
-      // this.fetchContent(block)
+      ''
     );
+  }
+  parseStatement(tree, cb, left, right, mode = 'block'){
+    let res = [];
+    let content = this.searchBlockDiff(tree, left || /(var|let|const)/g, right || /(\,|;|function|\n+)/g, mode);
+    let end = content[1];
+    let current;
+    res = res.concat([content]);
+    // 处理,和换行符
+    if(/(\,|\n+)/.test(tree[end].s)){
+      let curTree = tree.slice(end);
+      if (tree[end].s === ',') {
+        current = this.parseStatement(curTree, content2 => {
+          return this.realLine(content2[0], end);
+        }, /,/g, /(\,|;|function)/g);
+        res.push(current);
+      } else {
+        // 最后一句是声明
+        if(tree.length === end){
+
+        } else {
+          current = this.parseStatement(curTree, content2 => {
+            if(content2.length){
+              let resTree = curTree[content2[0][1]];
+              if(/(var\s|let\s|const\s)/.test(resTree.s)){
+                return [];
+              }
+            }
+            return this.realLine(content2[0], end);
+          }, /\n+/g, /(var\s|let\s|const\s|,|;|function)/g, 'ignore');
+          current.length && res.push(current);
+        }
+      }
+    } else {
+      
+    }
+
+    // res是个数组列表
+    return cb ? cb(res) : res;
   }
 }
 
@@ -1154,10 +1296,10 @@ class Core {
    * @param {Array} tree 查找树
    * @param {String|RegExp} left 左边界
    * @param {String|RegExp} right 右边界
-   * @param {Boolean=} nest 是否为嵌套
+   * @param {string=} mode 嵌套模式 block(固定匹配左右: {}) | nest(可以嵌套: a={b:{}}) | ignore(忽略多余左边界符) var a \n\n var b
    * @param {Function=} error 不为嵌套, 且找到两个连续的左边界符时
    */
-  searchBlockDiff(tree = [], leftReg, rightReg, nest = true, error){
+  searchBlockDiff(tree = [], leftReg, rightReg, mode = 'block', error){
 
     // 根据正负, 可以反映出 左右边界出现次数
     let count = 0;
@@ -1171,12 +1313,14 @@ class Core {
 
     let len = tree.length;
     let current = 0;
-
     while (!isError && !isFound && current < len - 1) {
       right = current;
       let symbol = tree[current];
-
+      if(mode === 'ignore'){
+        // console.log(symbol, left);
+      }
       // 先查找左边界符
+      // 不为忽略模式, 需要一直判断左边界符
       if (leftReg.test(symbol.s)) {
         // 找到第一个
         if (left < 0) {
@@ -1184,13 +1328,16 @@ class Core {
         // 找到第二个
         } else {
           // 如果不允许嵌套, 则报错. 
-          if (!nest) {
+          if (mode === 'block') {
             isError = true;
           }
         }
         count += 1;
       } else if (rightReg.test(symbol.s)) {
         count -= 1;
+        if(left >= 0 && mode === 'ignore'){
+          isFound = true;
+        }
       }
       // 如果存在左边界符, 且找到了右边界符, 则任务完成~
       if (left >= 0 && count === 0) {
@@ -1203,7 +1350,7 @@ class Core {
   }
   /**
    * 取出内容
-   * @param {array} block 截取范围
+   * @param {Array} block 截取范围
    */
   fetchContent(block, left = 0, right = 0){
     try{
@@ -1216,12 +1363,14 @@ class Core {
   }
   /**
    * 取出词法树
-   * @param {array} block 截取范围
+   * @param {Array} tree 指定要截取的树
+   * @param {Array} block 截取范围
    */
-  fetchTree(block){
+  fetchTree(tree, block){
+    tree = tree || this.termsTree || [];
     let start = block[0];
     let end = block[block.length-1] + 1;
-    return this.termsTree.slice(start, end);
+    return tree.slice(start, end);
   }
   verify(str){
     return str = typeof str === 'string'? str : '';
@@ -1258,6 +1407,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "FunctionParams", function() { return FunctionParams; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "FunctionContext", function() { return FunctionContext; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Functions", function() { return Functions; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Statement2", function() { return Statement2; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Statement", function() { return Statement; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ExpressionStatement", function() { return ExpressionStatement; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "EmptyStatement", function() { return EmptyStatement; });
@@ -1299,6 +1449,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Block", function() { return Block; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "StatementLeft", function() { return StatementLeft; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "StatementRight", function() { return StatementRight; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "StringBlock", function() { return StringBlock; });
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "AnnotationBlock", function() { return AnnotationBlock; });
 const SourceLocation  = function(){
   
 }
@@ -1325,19 +1477,20 @@ const Bracket = function(content, block){
   this.block = block;
   this.content = content;
 }
-const FunctionParams = function(block, body = '', child){
+const FunctionParams = function(block, body = '', child = []){
   this.block = block;
   this.body = body;
   this.child = child;
 }
 
-const FunctionContext = function(block, body = '', child){
+const FunctionContext = function(block, body = '', child = []){
   this.block = block;
   this.body = body;
   this.child = child;
 } 
 const Functions = function(type, name, params, context, treeno, symbol){
   this.type = type;
+  this.s = type;
   this.name = name;
   this.params = params;
   this.context = context;
@@ -1346,7 +1499,7 @@ const Functions = function(type, name, params, context, treeno, symbol){
   this.index = symbol.i;
   return this;
 }
-const Statement = function(type, name, body, block, treeno, symbol){
+const Statement2 = function(type, name, body, block, treeno, symbol){
   this.type = type;
   this.name = name;
   this.body = body;
@@ -1354,6 +1507,9 @@ const Statement = function(type, name, body, block, treeno, symbol){
   this.treeno = treeno;
   this.lineno = symbol.l;
   this.index = symbol.i;
+}
+const Statement = function(content){
+  this.content = content;
 }
 const ExpressionStatement = function(){
 
@@ -1525,9 +1681,27 @@ const StatementRight = function(block, content){
   this.content = content;
   this.block = block;
 }
+const StringBlock = function(symbol, realno){
+  this.s = symbol.s;
+  this.type = symbol.s;
+  this.body = symbol.t;
+  this.treeno = realno;
+  this.lineno = symbol.l;
+  this.index = symbol.i;
+}
+const AnnotationBlock = function(symbol, realno){
+  this.s = symbol.s;
+  this.type = symbol.s;
+  this.body = symbol.t;
+  this.treeno = realno;
+  this.lineno = symbol.l;
+  this.index = symbol.i;
+}
 
 /* harmony default export */ __webpack_exports__["default"] = ({
   Bracket,
+  StringBlock,
+  AnnotationBlock,
   StatementLeft,
   StatementRight,
   SourceLocation,
@@ -1581,6 +1755,372 @@ const StatementRight = function(block, content){
   FunctionContext
 });
 
+
+/***/ }),
+/* 5 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+/* WEBPACK VAR INJECTION */(function(process) {
+
+const colors = { enabled: true, visible: true, styles: {}, keys: {} };
+
+if ('FORCE_COLOR' in process.env) {
+  colors.enabled = process.env.FORCE_COLOR !== '0';
+}
+
+const ansi = style => {
+  style.open = `\u001b[${style.codes[0]}m`;
+  style.close = `\u001b[${style.codes[1]}m`;
+  style.regex = new RegExp(`\\u001b\\[${style.codes[1]}m`, 'g');
+  return style;
+};
+
+const wrap = (style, str, nl) => {
+  let { open, close, regex } = style;
+  str = open + (str.includes(close) ? str.replace(regex, close + open) : str) + close;
+  // see https://github.com/chalk/chalk/pull/92, thanks to the
+  // chalk contributors for this fix. However, we've confirmed that
+  // this issue is also present in Windows terminals
+  return nl ? str.replace(/\r?\n/g, `${close}$&${open}`) : str;
+};
+
+const style = (input, stack) => {
+  if (input === '' || input == null) return '';
+  if (colors.enabled === false) return input;
+  if (colors.visible === false) return '';
+  let str = '' + input;
+  let nl = str.includes('\n');
+  let n = stack.length;
+  while (n-- > 0) str = wrap(colors.styles[stack[n]], str, nl);
+  return str;
+};
+
+const define = (name, codes, type) => {
+  colors.styles[name] = ansi({ name, codes });
+  let t = colors.keys[type] || (colors.keys[type] = []);
+  t.push(name);
+
+  Reflect.defineProperty(colors, name, {
+    get() {
+      let color = input => style(input, color.stack);
+      Reflect.setPrototypeOf(color, colors);
+      color.stack = this.stack ? this.stack.concat(name) : [name];
+      return color;
+    }
+  });
+};
+
+define('reset', [0, 0], 'modifier');
+define('bold', [1, 22], 'modifier');
+define('dim', [2, 22], 'modifier');
+define('italic', [3, 23], 'modifier');
+define('underline', [4, 24], 'modifier');
+define('inverse', [7, 27], 'modifier');
+define('hidden', [8, 28], 'modifier');
+define('strikethrough', [9, 29], 'modifier');
+
+define('black', [30, 39], 'color');
+define('red', [31, 39], 'color');
+define('green', [32, 39], 'color');
+define('yellow', [33, 39], 'color');
+define('blue', [34, 39], 'color');
+define('magenta', [35, 39], 'color');
+define('cyan', [36, 39], 'color');
+define('white', [37, 39], 'color');
+define('gray', [90, 39], 'color');
+define('grey', [90, 39], 'color');
+
+define('bgBlack', [40, 49], 'bg');
+define('bgRed', [41, 49], 'bg');
+define('bgGreen', [42, 49], 'bg');
+define('bgYellow', [43, 49], 'bg');
+define('bgBlue', [44, 49], 'bg');
+define('bgMagenta', [45, 49], 'bg');
+define('bgCyan', [46, 49], 'bg');
+define('bgWhite', [47, 49], 'bg');
+
+define('blackBright', [90, 39], 'bright');
+define('redBright', [91, 39], 'bright');
+define('greenBright', [92, 39], 'bright');
+define('yellowBright', [93, 39], 'bright');
+define('blueBright', [94, 39], 'bright');
+define('magentaBright', [95, 39], 'bright');
+define('cyanBright', [96, 39], 'bright');
+define('whiteBright', [97, 39], 'bright');
+
+define('bgBlackBright', [100, 49], 'bgBright');
+define('bgRedBright', [101, 49], 'bgBright');
+define('bgGreenBright', [102, 49], 'bgBright');
+define('bgYellowBright', [103, 49], 'bgBright');
+define('bgBlueBright', [104, 49], 'bgBright');
+define('bgMagentaBright', [105, 49], 'bgBright');
+define('bgCyanBright', [106, 49], 'bgBright');
+define('bgWhiteBright', [107, 49], 'bgBright');
+
+/* eslint-disable no-control-regex */
+const re = colors.ansiRegex = /\u001b\[\d+m/gm;
+colors.hasColor = colors.hasAnsi = str => {
+  re.lastIndex = 0;
+  return !!str && typeof str === 'string' && re.test(str);
+};
+
+colors.unstyle = str => {
+  re.lastIndex = 0;
+  return typeof str === 'string' ? str.replace(re, '') : str;
+};
+
+colors.none = colors.clear = colors.noop = str => str; // no-op, for programmatic usage
+colors.stripColor = colors.unstyle;
+colors.symbols = __webpack_require__(7);
+colors.define = define;
+module.exports = colors;
+
+/* WEBPACK VAR INJECTION */}.call(this, __webpack_require__(6)))
+
+/***/ }),
+/* 6 */
+/***/ (function(module, exports) {
+
+// shim for using process in browser
+var process = module.exports = {};
+
+// cached from whatever global is present so that test runners that stub it
+// don't break things.  But we need to wrap it in a try catch in case it is
+// wrapped in strict mode code which doesn't define any globals.  It's inside a
+// function because try/catches deoptimize in certain engines.
+
+var cachedSetTimeout;
+var cachedClearTimeout;
+
+function defaultSetTimout() {
+    throw new Error('setTimeout has not been defined');
+}
+function defaultClearTimeout () {
+    throw new Error('clearTimeout has not been defined');
+}
+(function () {
+    try {
+        if (typeof setTimeout === 'function') {
+            cachedSetTimeout = setTimeout;
+        } else {
+            cachedSetTimeout = defaultSetTimout;
+        }
+    } catch (e) {
+        cachedSetTimeout = defaultSetTimout;
+    }
+    try {
+        if (typeof clearTimeout === 'function') {
+            cachedClearTimeout = clearTimeout;
+        } else {
+            cachedClearTimeout = defaultClearTimeout;
+        }
+    } catch (e) {
+        cachedClearTimeout = defaultClearTimeout;
+    }
+} ())
+function runTimeout(fun) {
+    if (cachedSetTimeout === setTimeout) {
+        //normal enviroments in sane situations
+        return setTimeout(fun, 0);
+    }
+    // if setTimeout wasn't available but was latter defined
+    if ((cachedSetTimeout === defaultSetTimout || !cachedSetTimeout) && setTimeout) {
+        cachedSetTimeout = setTimeout;
+        return setTimeout(fun, 0);
+    }
+    try {
+        // when when somebody has screwed with setTimeout but no I.E. maddness
+        return cachedSetTimeout(fun, 0);
+    } catch(e){
+        try {
+            // When we are in I.E. but the script has been evaled so I.E. doesn't trust the global object when called normally
+            return cachedSetTimeout.call(null, fun, 0);
+        } catch(e){
+            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error
+            return cachedSetTimeout.call(this, fun, 0);
+        }
+    }
+
+
+}
+function runClearTimeout(marker) {
+    if (cachedClearTimeout === clearTimeout) {
+        //normal enviroments in sane situations
+        return clearTimeout(marker);
+    }
+    // if clearTimeout wasn't available but was latter defined
+    if ((cachedClearTimeout === defaultClearTimeout || !cachedClearTimeout) && clearTimeout) {
+        cachedClearTimeout = clearTimeout;
+        return clearTimeout(marker);
+    }
+    try {
+        // when when somebody has screwed with setTimeout but no I.E. maddness
+        return cachedClearTimeout(marker);
+    } catch (e){
+        try {
+            // When we are in I.E. but the script has been evaled so I.E. doesn't  trust the global object when called normally
+            return cachedClearTimeout.call(null, marker);
+        } catch (e){
+            // same as above but when it's a version of I.E. that must have the global object for 'this', hopfully our context correct otherwise it will throw a global error.
+            // Some versions of I.E. have different rules for clearTimeout vs setTimeout
+            return cachedClearTimeout.call(this, marker);
+        }
+    }
+
+
+
+}
+var queue = [];
+var draining = false;
+var currentQueue;
+var queueIndex = -1;
+
+function cleanUpNextTick() {
+    if (!draining || !currentQueue) {
+        return;
+    }
+    draining = false;
+    if (currentQueue.length) {
+        queue = currentQueue.concat(queue);
+    } else {
+        queueIndex = -1;
+    }
+    if (queue.length) {
+        drainQueue();
+    }
+}
+
+function drainQueue() {
+    if (draining) {
+        return;
+    }
+    var timeout = runTimeout(cleanUpNextTick);
+    draining = true;
+
+    var len = queue.length;
+    while(len) {
+        currentQueue = queue;
+        queue = [];
+        while (++queueIndex < len) {
+            if (currentQueue) {
+                currentQueue[queueIndex].run();
+            }
+        }
+        queueIndex = -1;
+        len = queue.length;
+    }
+    currentQueue = null;
+    draining = false;
+    runClearTimeout(timeout);
+}
+
+process.nextTick = function (fun) {
+    var args = new Array(arguments.length - 1);
+    if (arguments.length > 1) {
+        for (var i = 1; i < arguments.length; i++) {
+            args[i - 1] = arguments[i];
+        }
+    }
+    queue.push(new Item(fun, args));
+    if (queue.length === 1 && !draining) {
+        runTimeout(drainQueue);
+    }
+};
+
+// v8 likes predictible objects
+function Item(fun, array) {
+    this.fun = fun;
+    this.array = array;
+}
+Item.prototype.run = function () {
+    this.fun.apply(null, this.array);
+};
+process.title = 'browser';
+process.browser = true;
+process.env = {};
+process.argv = [];
+process.version = ''; // empty string to avoid regexp issues
+process.versions = {};
+
+function noop() {}
+
+process.on = noop;
+process.addListener = noop;
+process.once = noop;
+process.off = noop;
+process.removeListener = noop;
+process.removeAllListeners = noop;
+process.emit = noop;
+process.prependListener = noop;
+process.prependOnceListener = noop;
+
+process.listeners = function (name) { return [] }
+
+process.binding = function (name) {
+    throw new Error('process.binding is not supported');
+};
+
+process.cwd = function () { return '/' };
+process.chdir = function (dir) {
+    throw new Error('process.chdir is not supported');
+};
+process.umask = function() { return 0; };
+
+
+/***/ }),
+/* 7 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+/* WEBPACK VAR INJECTION */(function(process) {
+
+const isWindows = process.platform === 'win32';
+const isLinux = process.platform === 'linux';
+
+const windows = {
+  bullet: '•',
+  check: '√',
+  cross: '×',
+  ellipsis: '...',
+  heart: '❤',
+  info: 'i',
+  line: '─',
+  middot: '·',
+  minus: '－',
+  plus: '＋',
+  question: '?',
+  questionSmall: '﹖',
+  pointer: '>',
+  pointerSmall: '»',
+  warning: '‼'
+};
+
+const other = {
+  ballotCross: '✘',
+  bullet: '•',
+  check: '✔',
+  cross: '✖',
+  ellipsis: '…',
+  heart: '❤',
+  info: 'ℹ',
+  line: '─',
+  middot: '·',
+  minus: '－',
+  plus: '＋',
+  question: '?',
+  questionFull: '？',
+  questionSmall: '﹖',
+  pointer: isLinux ? '▸' : '❯',
+  pointerSmall: isLinux ? '‣' : '›',
+  warning: '⚠'
+};
+
+module.exports = isWindows ? windows : other;
+Reflect.defineProperty(module.exports, 'windows', { enumerable: false, value: windows });
+Reflect.defineProperty(module.exports, 'other', { enumerable: false, value: other });
+
+/* WEBPACK VAR INJECTION */}.call(this, __webpack_require__(6)))
 
 /***/ })
 /******/ ]);
