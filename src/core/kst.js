@@ -146,7 +146,7 @@ export class AST extends Core {
     });
     return content;
   }
-  buildGrammarTree(tree, no, first){
+  buildGrammarTree(tree, no){
     tree = tree || this.termsTree || [];
     let len = tree.length;
     let current = 0;
@@ -159,11 +159,7 @@ export class AST extends Core {
     while(current < len - 1){
       symbol = tree[current];
       realno = current + no;
-      // if (
-      //   (!first && !/var|let|const|function/.test(symbol.s))
-      //   ||
-      //   (first && /var|let|const|function/.test(symbol.s))
-      // ) {
+
         switch(symbol.s.charAt(0)){
           case '\n':
               line += symbol.s.length;
@@ -176,10 +172,6 @@ export class AST extends Core {
               res = res.concat(this.parseStatement(cTree, realno, symbol, old));
             }
             break;
-          // case '(':
-          //   cTree = tree.slice(current);
-          //   res = res.concat(this.parseBracket(cTree, realno));
-          //   break;
           case ';':
             old = null;
             break;
@@ -221,7 +213,6 @@ export class AST extends Core {
             old && res.concat(symbol);
           break;
         }
-      // }
       current++;
 
     }
@@ -332,7 +323,6 @@ export class AST extends Core {
    * @param {function} error 不为嵌套, 且找到两个连续的左边界符时 
    */
   searchBlockDiff(tree = [], left, right, nest = false, error){
-
     let len = tree.length;
     let start = -1;
     let count = 0;
