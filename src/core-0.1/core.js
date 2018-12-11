@@ -93,7 +93,11 @@ export class Core {
         isFound = true;
       } else {
         current++;
+        // right = current;
       }
+    }
+    if(!isFound){
+      right = -1;
     }
     return isError ? error && error(current) : [left, right];
   }

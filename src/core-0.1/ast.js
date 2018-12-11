@@ -77,13 +77,26 @@ export class AST extends Core {
     let text = '';
     // 截取位置
     let cutIndx = 0;
+
+    let endIndex = 0;
     
     console.time('buildTermsTree');
 
     // 一些关键词, 包括: 声明/函数/判断/循环/分语句/条件/注释
-    let reg = /(var\s|let\s|const\s|function|if|for|\.|\'|\"|:|,|;|\{|\}|\(|\))|(==|[\+\-\*\/><=]|)=|\/(\/|\*)|\n+/g;
+    let reg = /(((\b)(var\s|let\s|const\s|function|if|for))|\'|\"|:|,|;|\{|\}|\(|\))|(==|[\+\-\*\/><=]|)=|\/(\/|\*)|\n+/g;
 
     while(symbol = reg.exec(content)){
+      if(endIndex !== symbol.index){
+        let text = content.slice(endIndex, symbol.index);
+        // if(text){
+          list.push({
+            s: 'un',
+            t: text,
+            i: endIndex + cutIndx,
+            l: line
+          });
+        // }
+      }
       // 如果是换行, 记录一下行数
       if(symbol[0].charAt(0) === '\n'){
         list.push({
@@ -93,6 +106,7 @@ export class AST extends Core {
         });
         // 递增时需使用length, 因为可能存在多个换行符
         line += symbol[0].length;
+        endIndex = symbol.index + symbol[0].length;
       } else {
         // 没有左边界符时
         if(type === ''){
@@ -100,10 +114,11 @@ export class AST extends Core {
             type = symbol[0];
           } else {
             list.push({
-              s: symbol[0],
+              s: this.trim(symbol[0]),
               i: symbol.index + cutIndx,
               l: line
             });
+            endIndex = symbol.index + symbol[0].length;
           }
         }
 
@@ -130,10 +145,11 @@ export class AST extends Core {
             } else if(type === '/'){
               
             }else if(type === '"' || type === '\'' ){
-              debugger
-              throw(new Error('symbolError ' + type + 'at ' + line))
+              console.log(type, symbol.s, content.slice(0, 10))
+              // debugger
+              // throw(new Error('symbolError ' + type + 'at ' + line))
             }
-            content = '';
+            // content = '';
           } else {
             // 右边界在content中的实际位置
             // index += symbol.index;
@@ -155,6 +171,7 @@ export class AST extends Core {
             type = '';
             // 截取过字符串时, 需要对正则的索引进行重置
             reg.lastIndex = 0;
+            endIndex = 0;
           }
         }
       }
@@ -167,13 +184,14 @@ export class AST extends Core {
    * 构建语法树
    * @param {String} tree 词法树
    */
-  buildGrammarTree(tree, no = 0){
+  buildGrammarTree(tree, no = 0, a, b){
     tree = tree || this.termsTree || [];
     // 收敛代码片段
     tree = this.convergenceSnippet(tree, no);
     // console.log(tree);
     // 收敛声明
-    tree = this.convergenceStatement(tree, no);
+    tree = this.convergenceStatement(tree, no, a, b);
+    
     return tree;
   }
   /**
@@ -263,30 +281,51 @@ export class AST extends Core {
    * @param {Array} tree 词法树片段
    * @param {number} no 词法树片段 在 AST词法树 的位置
    */
-  convergenceStatement(tree, no = 0){
+  convergenceStatement(tree, no = 0, a, b){
+    // console.log(tree, no, a, b);
+    
     tree = tree || this.termsTree || [];
     let list = [];
     let symbol;
     let current = 0;
     let len = tree.length;
     let realno;
+    let type = '';
+    let un;
     while (current < len) {
       symbol = tree[current];
       realno = current + no;
-      if (/(var|let|const)/.test(symbol.s)) {
+      if (/\b(var|let|const)/.test(symbol.s)) {
         let cTree = tree.slice(current);
-        list = list.concat(this.parseStatement(cTree, (content) => {
+        let result = this.parseStatement(cTree, (content) => {
           let statement = [];
           let end = content.length ? content[content.length - 1] : [0, 0];
           content.forEach(item => {
-            this.splitStatement(this.fetchTree(cTree, item), () => {
-              // statement.push(new TYPE.Statement(type, left, right, symbol));
+            // this.splitStatement(this.fetchTree(cTree, item), () => {
+            //   // statement.push(new TYPE.Statement(type, left, right, symbol));
+            // });
+            let contentTree = this.splitStatement(type, this.fetchTree(cTree, item), realno, (type, name, value) => {
+              // statement.push(new TYPE.Statement(type, this.fetchTree(cTree, item), realno, contentTree));
+              statement.push(new TYPE.Statement(type, name, value, this.fetchTree(cTree, item), realno));
             });
-            statement.push(new TYPE.Statement(this.fetchTree(cTree, item)));
+            // cTree = cTree.slice(item[1]);
           });
           current += end[1];
           return statement;
-        }));
+        });
+        if(result){
+          list = list.concat(result);
+        }
+        // if(a){
+        //   debugger;
+        // }
+      } else if(symbol.s === 'un'){
+        this.convergenceUnknown(tree.slice(current), realno, (type, line, result) => {
+          current += line;
+          if (result) {
+            list.push(result);
+          }
+        });
       } else {
         list.push(symbol);
       }
@@ -294,8 +333,157 @@ export class AST extends Core {
     }
     return list;
   }
-  splitStatement(tree, cb){
-    // console.log(tree);
+  /**
+   * 收敛未知语句
+   * @param {Array} symbol 在词法树中标志
+   * @param {Array} tree 词法树
+   * @param {Number} no 在主词法树中的位置
+   */
+  convergenceUnknown(tree = [], no = 0, cb){
+    let len = tree.length
+    let symbol;
+    let type = 'un';
+    let line = 0;
+    if (len === 1) {
+      symbol = new TYPE.StringBlock(tree[0], no);
+    } else if(len > 1) {
+      symbol = tree[0];
+      let next = tree[1];
+      if(next.s === '='){
+        type = 'assignment';
+        if(len === 2){
+          return ;
+        }
+        line = 2;
+        if(/(var|let|const|function|\n|,|;)/.test(tree[3].s)){
+          line += 1;
+        }
+        symbol = this.parseAssignment(tree.slice(0,4), no);
+      } else if(/(var|let|const|function|,|;|\n)/.test(next.s)){
+        symbol = new TYPE.StringBlock(tree[0], no);
+      }
+    }
+    return cb(type, line, symbol);
+  }
+  parseAssignment(tree, no){
+    return new TYPE.Assignment(tree[0], tree[2], tree[3] || null, no);
+  }
+  verifyName(name){
+    return this.trim(name);
+  }
+  splitStatement(type, tree = [], no = 0, cb){
+    let left = this.searchBlockDiff(tree, /(var|let|const|,)/g, /=/g, 'block');
+    let right = this.searchBlockDiff(tree, /=/g, /(\,|;|function)/g, 'block');
+    let leftTree = this.fetchTree(tree, left[1] < 0? [0, tree.length] : left);
+    let leftState = this.searchValid(leftTree, 
+      this.createObjByList(['un']), 
+      {},
+      {}
+    );
+    let rightTree;
+    let rightState;
+    let name;
+    let value;
+    if(leftTree.length < tree.length){
+      if(right[0] >= 0){
+        rightTree = this.fetchTree(tree, right[1] < 0? [right[0], tree.length] : right);
+        rightState = this.searchValid(rightTree,
+          this.createObjByList(['=', ',', '\n']),
+          {},
+          this.createObjByList(['/*']),
+        );
+        value = ((rightState.otherList[0] || {}).symbol||{});
+      }
+    }
+
+    if(leftState.len < 2){
+      // throw(new Error(type + ' = 没有结束'));
+    } else if(leftState.len === 2){
+      if(res['un'] && res['un'].length === 1){
+        name = this.verifyName(res['un'][0].t);
+      }
+    } else if(leftState.len >= 3){
+      let res = leftState.res;
+      if(res['un']){
+        if(res['un'].length === 1){
+          name = this.verifyName(res['un'][0].t);
+        } else {
+          // throw(new Error(type + ' = '));
+        }
+      }
+    } else {
+      // TODO: 需要处理声明中有其它字符; let /**/ name /* */;
+    }
+    // console.log(type, name, value, leftState, rightState)
+    return cb ? cb(type, name, value) : [type, name, value];
+  }
+  createObjByList(list = [], value = 1){
+    let res = {};
+    list.forEach(item => {
+      res[item] = value;
+    });
+    return res;
+  }
+  /**
+   * 查询有效节点
+   * @param {Array} tree 要查询的词法树
+   * @param {Object} white 白名单
+   * @param {Object} black 黑名单
+   * @param {Object} black 忽略名单
+   * @param {Object} black 其它
+   */
+  searchValid(tree = [], white = {}, black = {}, ignore = {}){
+    let res = {};
+    let count = 0;
+    let whiteList = [];
+    let blackList = [];
+    let ignoreList = [];
+    let otherList = [];
+    let key;
+    tree.forEach((symbol, index) => {
+      key = /\n+/.test(symbol.s)? '\n' : symbol.s;
+      if(symbol.s == 'un' && /^\s+$/.test(symbol.t)){
+        return ;
+      }
+      if(white[key]){
+        whiteList.push({
+          index,
+          symbol
+        });
+      } else if(ignore[key]){
+        ignoreList.push({
+          index,
+          symbol
+        });
+      } else if(black[key]){
+        blackList.push({
+          index,
+          symbol
+        });
+      } else {
+        otherList.push({
+          index,
+          symbol
+        });
+      }
+      if(!res[key]){
+        count++;
+        res[key] = [symbol];
+      } else {
+        res[key].push(symbol);
+      }
+      
+    });
+
+    return {
+      res,
+      count,
+      blackList,
+      whiteList,
+      ignoreList,
+      otherList,
+      len: tree.length
+    };
   }
   /**
    *  分析函数块
@@ -325,6 +513,9 @@ export class AST extends Core {
     );
   }
   parseStatement(tree, cb, left, right, mode = 'block'){
+    if(tree.length < 2){
+      return;
+    }
     let res = [];
     let content = this.searchBlockDiff(tree, left || /(var|let|const)/g, right || /(\,|;|function|\n+)/g, mode);
     let end = content[1];
@@ -346,12 +537,12 @@ export class AST extends Core {
           current = this.parseStatement(curTree, content2 => {
             if(content2.length){
               let resTree = curTree[content2[0][1]];
-              if(/(var\s|let\s|const\s)/.test(resTree.s)){
+              if(/(var|let|const)/.test(resTree.s)){
                 return [];
               }
             }
             return this.realLine(content2[0], end);
-          }, /\n+/g, /(var\s|let\s|const\s|,|;|function)/g, 'ignore');
+          }, /\n+/g, /(var|let|const|,|;|function)/g, 'ignore');
           current.length && res.push(current);
         }
       }

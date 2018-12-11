@@ -55,8 +55,13 @@ export const Statement2 = function(type, name, body, block, treeno, symbol){
   this.lineno = symbol.l;
   this.index = symbol.i;
 }
-export const Statement = function(content){
+export const Statement = function(type, name, value, treeno, content){
+  this.type = type;
+  this.s = type;
+  this.name = name;
+  this.value = value;
   this.content = content;
+  this.treeno = treeno;
 }
 export const ExpressionStatement = function(){
 
@@ -244,9 +249,17 @@ export const AnnotationBlock = function(symbol, realno){
   this.lineno = symbol.l;
   this.index = symbol.i;
 }
+export const Assignment = function(name, value, end, realno){
+  this.name = name;
+  this.value = value;
+  this.end = end;
+  this.realno = realno;
+}
+
 
 export default {
   Bracket,
+  Assignment,
   StringBlock,
   AnnotationBlock,
   StatementLeft,
