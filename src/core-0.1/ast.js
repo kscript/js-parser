@@ -20,6 +20,11 @@ export class AST extends Core {
     // 语法树
     this.grammarTree = [];
 
+    // 上下文环境
+    this.contextTree = {
+      scope: {}
+    };
+
     // 定义左右边界符, 配合type使用
     this.ambitMap = {
       '/*': {
@@ -57,6 +62,7 @@ export class AST extends Core {
     this.termsTree = this.buildTermsTree();
     // 语法树
     this.grammarTree = this.buildGrammarTree(this.termsTree, 0);
+    this.contextTree.scope = this.buildContextTree(this.grammarTree);
   }
   
   /**
@@ -83,7 +89,7 @@ export class AST extends Core {
     console.time('buildTermsTree');
 
     // 一些关键词, 包括: 声明/函数/判断/循环/分语句/条件/注释
-    let reg = /(((\b)(var\s|let\s|const\s|function|if|for))|\'|\"|:|,|;|\{|\}|\(|\))|(==|[\+\-\*\/><=]|)=|\/(\/|\*)|\n+/g;
+    let reg = /(((\b)(var\s|let\s|const\s|function|if|for))|\'|\"|\.|:|,|;|\{|\}|\(|\))|(==|[\+\-\*\/><=]|)=|\/(\/|\*)|\n+/g;
 
     while(symbol = reg.exec(content)){
       if(endIndex !== symbol.index){
@@ -181,16 +187,65 @@ export class AST extends Core {
     return list;
   }
   /**
+   * 构建环境树
+   * @param {Array} tree 语法树
+   */
+  buildContextTree(tree = [], scope = {}){
+    let name;
+    let value;
+    let current;
+    // console.log(tree);
+    tree.forEach(item => {
+      name = item.name;
+      current = {
+        scope: {},
+        type: item.type,
+        name: item.name,
+        value: item instanceof TYPE.Functions ? item : item.value
+      };
+      if(item instanceof TYPE.Statement){
+        scope[name] = current;
+        if (item.value && item.value.type === 'function') {
+          current.scope = this.buildContextTree(item.value.child, current.scope);
+        }
+      } else if(item instanceof TYPE.Functions){
+        if(name){
+          scope[name] = current;
+          if(item.child.length){
+            current.scope = this.buildContextTree(item.child, current.scope);
+          }
+        } else {
+          current.name = 'anonymous';
+          current.value = item;
+          scope['[[scope]]'] = scope['[[scope]]'] || [];
+          scope['[[scope]]'].push(current);
+          if(item.child.length){
+            current.scope = this.buildContextTree(item.child, current.scope);
+          }
+        }
+      } else if(item instanceof TYPE.Assignment){
+        name = this.trim(item.name.t);
+        current.name = name;
+        current.type = 'var';
+        scope[name] = current;
+        if(current.value  && current.value instanceof TYPE.Functions && item.child.length){
+          current['[[scope]]'] = this.buildContextTree(item.child, current['[[scope]]']);
+        }
+      }
+    });
+    return scope;
+  }
+  /**
    * 构建语法树
    * @param {String} tree 词法树
    */
-  buildGrammarTree(tree, no = 0, a, b){
+  buildGrammarTree(tree, no = 0){
     tree = tree || this.termsTree || [];
     // 收敛代码片段
     tree = this.convergenceSnippet(tree, no);
     // console.log(tree);
     // 收敛声明
-    tree = this.convergenceStatement(tree, no, a, b);
+    tree = this.convergenceStatement(tree, no);
     
     return tree;
   }
@@ -291,22 +346,19 @@ export class AST extends Core {
     let len = tree.length;
     let realno;
     let type = '';
-    let un;
+    let cTree;
     while (current < len) {
       symbol = tree[current];
       realno = current + no;
+      cTree = tree.slice(current);
       if (/\b(var|let|const)/.test(symbol.s)) {
-        let cTree = tree.slice(current);
+        type = symbol.s;
         let result = this.parseStatement(cTree, (content) => {
           let statement = [];
           let end = content.length ? content[content.length - 1] : [0, 0];
           content.forEach(item => {
-            // this.splitStatement(this.fetchTree(cTree, item), () => {
-            //   // statement.push(new TYPE.Statement(type, left, right, symbol));
-            // });
             let contentTree = this.splitStatement(type, this.fetchTree(cTree, item), realno, (type, name, value) => {
-              // statement.push(new TYPE.Statement(type, this.fetchTree(cTree, item), realno, contentTree));
-              statement.push(new TYPE.Statement(type, name, value, this.fetchTree(cTree, item), realno));
+              statement.push(new TYPE.Statement(type, name, value, this.realLine(item, realno), realno));
             });
             // cTree = cTree.slice(item[1]);
           });
@@ -316,15 +368,16 @@ export class AST extends Core {
         if(result){
           list = list.concat(result);
         }
-        // if(a){
-        //   debugger;
-        // }
       } else if(symbol.s === 'un'){
-        this.convergenceUnknown(tree.slice(current), realno, (type, line, result) => {
+        this.convergenceUnknown(cTree, realno, (type, line, result) => {
           current += line;
           if (result) {
             list.push(result);
           }
+        });
+      } else if(symbol.s === 'for'){
+        this.convergenceLoop(cTree, realno, () => {
+          list.push(symbol);
         });
       } else {
         list.push(symbol);
@@ -335,7 +388,6 @@ export class AST extends Core {
   }
   /**
    * 收敛未知语句
-   * @param {Array} symbol 在词法树中标志
    * @param {Array} tree 词法树
    * @param {Number} no 在主词法树中的位置
    */
@@ -345,7 +397,8 @@ export class AST extends Core {
     let type = 'un';
     let line = 0;
     if (len === 1) {
-      symbol = new TYPE.StringBlock(tree[0], no);
+      symbol = tree[0];
+      // symbol = new TYPE.StringBlock(tree[0], no);
     } else if(len > 1) {
       symbol = tree[0];
       let next = tree[1];
@@ -360,10 +413,39 @@ export class AST extends Core {
         }
         symbol = this.parseAssignment(tree.slice(0,4), no);
       } else if(/(var|let|const|function|,|;|\n)/.test(next.s)){
-        symbol = new TYPE.StringBlock(tree[0], no);
+        symbol = tree[0];
+        // symbol = new TYPE.StringBlock(tree[0], no);
       }
     }
     return cb(type, line, symbol);
+  }
+  /**
+   * 收敛for循环体
+   * @param {Array} tree 词法树
+   * @param {Number} no 在主词法树中的位置
+   */
+  convergenceLoop(tree = [], no = 0, cb){
+    let protasis;
+    let content;
+    let protasisTree = [];
+    let contentTree = [];
+    protasis = this.searchBlockDiff(tree, /\(/, /\)/, 'nest');
+    protasisTree = this.fetchTree(tree, protasis);
+    if(protasis[1] < 0){
+      // throw(new Error('for 循环体 ) 缺失'))
+    } else {
+      content = this.searchBlockDiff(tree.slice(protasis[1]), /\{/, /\}/, 'nest');
+      contentTree = this.fetchTree(tree.slice(protasis[1]), content);
+    }
+    console.log(
+      // tree, 
+      no,
+      protasisTree,
+      contentTree
+      // this.buildGrammarTree(protasisTree, no + protasis[0]), 
+      // this.buildGrammarTree(contentTree, no + protasis[1] + content[0])
+    );
+    return cb && cb(protasis, content);
   }
   parseAssignment(tree, no){
     return new TYPE.Assignment(tree[0], tree[2], tree[3] || null, no);
@@ -372,8 +454,8 @@ export class AST extends Core {
     return this.trim(name);
   }
   splitStatement(type, tree = [], no = 0, cb){
-    let left = this.searchBlockDiff(tree, /(var|let|const|,)/g, /=/g, 'block');
-    let right = this.searchBlockDiff(tree, /=/g, /(\,|;|function)/g, 'block');
+    let left = this.searchBlockDiff(tree, /(var|let|const|,)/, /=/, 'block');
+    let right = this.searchBlockDiff(tree, /=/, /(\,|;|function)/, 'block');
     let leftTree = this.fetchTree(tree, left[1] < 0? [0, tree.length] : left);
     let leftState = this.searchValid(leftTree, 
       this.createObjByList(['un']), 
@@ -386,13 +468,20 @@ export class AST extends Core {
     let value;
     if(leftTree.length < tree.length){
       if(right[0] >= 0){
-        rightTree = this.fetchTree(tree, right[1] < 0? [right[0], tree.length] : right);
+        rightTree = this.fetchTree(tree, right[1] < 0 ? [right[0], tree.length] : right);
         rightState = this.searchValid(rightTree,
           this.createObjByList(['=', ',', '\n']),
           {},
           this.createObjByList(['/*']),
         );
-        value = ((rightState.otherList[0] || {}).symbol||{});
+        // 有等号 没赋值
+        if(rightState.otherList.length === 0 && rightState.res['=']){
+          // throw(new Error('='))
+        } else {
+          value = ((rightState.otherList[0] || {}).symbol||{});
+        }
+        
+        // console.log(tree, right, rightTree, rightState, rightState.otherList)
       }
     }
 
@@ -416,13 +505,6 @@ export class AST extends Core {
     }
     // console.log(type, name, value, leftState, rightState)
     return cb ? cb(type, name, value) : [type, name, value];
-  }
-  createObjByList(list = [], value = 1){
-    let res = {};
-    list.forEach(item => {
-      res[item] = value;
-    });
-    return res;
   }
   /**
    * 查询有效节点

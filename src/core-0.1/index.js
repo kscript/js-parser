@@ -7,6 +7,7 @@ var a = "var a = '1'",
 b = 2;
 tvar $b1 =  ;"  var ds;"
 var ss = function a(){
+  var a =2;
   console.log(1);
 
   for(var i = 0; i<= 10; i++){

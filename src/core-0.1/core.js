@@ -73,7 +73,7 @@ export class Core {
       if (leftReg.test(symbol.s)) {
         // 找到第一个
         if (left < 0) {
-          left = current
+          left = current;
         // 找到第二个
         } else {
           // 如果不允许嵌套, 则报错. 
@@ -82,7 +82,7 @@ export class Core {
           }
         }
         count += 1;
-      } else if (rightReg.test(symbol.s)) {
+      } else if (left >= 0 && rightReg.test(symbol.s)) {
         count -= 1;
         if(left >= 0 && mode === 'ignore'){
           isFound = true;
@@ -124,6 +124,19 @@ export class Core {
     let start = block[0];
     let end = block[block.length-1] + 1;
     return tree.slice(start, end);
+  }
+  /**
+   * 通过数组创建一个散列
+   * @param {Array} tree 数组
+   * @param {any|Array} block 值, 如果为数组时与 list 一一 对应
+   */
+  createObjByList(list = [], value = 1){
+    let res = {};
+    let mode = value instanceof Array ? 'list' : 'value';
+    list.forEach((item, index) => {
+      res[item] = mode === 'value' ? value : value[index];
+    });
+    return res;
   }
   verify(str){
     return str = typeof str === 'string'? str : '';

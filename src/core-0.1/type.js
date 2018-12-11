@@ -55,13 +55,13 @@ export const Statement2 = function(type, name, body, block, treeno, symbol){
   this.lineno = symbol.l;
   this.index = symbol.i;
 }
-export const Statement = function(type, name, value, treeno, content){
-  this.type = type;
+export const Statement = function(type, name, value, content, treeno){
   this.s = type;
+  this.type = type;
   this.name = name;
   this.value = value;
-  this.content = content;
   this.treeno = treeno;
+  this.content = content;
 }
 export const ExpressionStatement = function(){
 
