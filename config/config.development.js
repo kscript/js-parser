@@ -9,6 +9,11 @@ module.exports = {
   },
   webpack: {
     devtool:'source-map',
+    output: {
+      path: path.join(__dirname, '../dist'),
+      filename: "app.js",
+      publicPath: "/"
+    },
     devServer: {
       proxy: {
         '/api': 'http://localhost:5001'
