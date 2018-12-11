@@ -8,6 +8,7 @@ export class AST extends Core {
 
     this.content = content;
     this.option = option;
+    this.scoped = 0;
 
     // 分行
     this.lines = content.split("\n");
@@ -22,7 +23,13 @@ export class AST extends Core {
 
     // 上下文环境
     this.contextTree = {
-      scope: {}
+      scope: {
+      },
+      root: {
+        console: {
+          log: console.log
+        }
+      }
     };
 
     // 定义左右边界符, 配合type使用
@@ -62,7 +69,7 @@ export class AST extends Core {
     this.termsTree = this.buildTermsTree();
     // 语法树
     this.grammarTree = this.buildGrammarTree(this.termsTree, 0);
-    this.contextTree.scope = this.buildContextTree(this.grammarTree);
+    this.buildContextTree(this.grammarTree, this.contextTree.scope, this.contextTree.root);
   }
   
   /**
@@ -98,6 +105,7 @@ export class AST extends Core {
           list.push({
             s: 'un',
             t: text,
+            n: list.length,
             i: endIndex + cutIndx,
             l: line
           });
@@ -108,6 +116,7 @@ export class AST extends Core {
         list.push({
           s: symbol[0],
           i: symbol.index + cutIndx,
+          n: list.length,
           l: line
         });
         // 递增时需使用length, 因为可能存在多个换行符
@@ -122,6 +131,7 @@ export class AST extends Core {
             list.push({
               s: this.trim(symbol[0]),
               i: symbol.index + cutIndx,
+              n: list.length,
               l: line
             });
             endIndex = symbol.index + symbol[0].length;
@@ -172,6 +182,7 @@ export class AST extends Core {
               s: type,
               t: text,
               i: cutIndx - text.length - type.length  - this.ambitMap[type].right.length,
+              n: list.length,
               l: line
             });
             type = '';
@@ -190,29 +201,31 @@ export class AST extends Core {
    * 构建环境树
    * @param {Array} tree 语法树
    */
-  buildContextTree(tree = [], scope = {}){
+  buildContextTree(tree = [], scope = {}, parent = {}){
     let name;
     let value;
     let current;
-    // console.log(tree);
     tree.forEach(item => {
       name = item.name;
       current = {
+        parent,
         scope: {},
+        scopeIndex: this.scoped++,
         type: item.type,
         name: item.name,
         value: item instanceof TYPE.Functions ? item : item.value
       };
+      item.parent = parent;
       if(item instanceof TYPE.Statement){
         scope[name] = current;
         if (item.value && item.value.type === 'function') {
-          current.scope = this.buildContextTree(item.value.child, current.scope);
+          current.scope = this.buildContextTree(item.value.child, current.scope, scope);
         }
       } else if(item instanceof TYPE.Functions){
         if(name){
           scope[name] = current;
           if(item.child.length){
-            current.scope = this.buildContextTree(item.child, current.scope);
+            current.scope = this.buildContextTree(item.child, current.scope, scope);
           }
         } else {
           current.name = 'anonymous';
@@ -220,7 +233,7 @@ export class AST extends Core {
           scope['[[scope]]'] = scope['[[scope]]'] || [];
           scope['[[scope]]'].push(current);
           if(item.child.length){
-            current.scope = this.buildContextTree(item.child, current.scope);
+            current.scope = this.buildContextTree(item.child, current.scope, scope);
           }
         }
       } else if(item instanceof TYPE.Assignment){
@@ -228,8 +241,8 @@ export class AST extends Core {
         current.name = name;
         current.type = 'var';
         scope[name] = current;
-        if(current.value  && current.value instanceof TYPE.Functions && item.child.length){
-          current['[[scope]]'] = this.buildContextTree(item.child, current['[[scope]]']);
+        if(current.value && current.value instanceof TYPE.Functions && item.child.length){
+          current['[[scope]]'] = this.buildContextTree(item.child, current['[[scope]]'], scope);
         }
       }
     });
@@ -300,11 +313,12 @@ export class AST extends Core {
     let current = 0;
     let len = tree.length;
     let realno;
+    let cTree;
     while (current < len) {
       symbol = tree[current];
       realno = current + no;
+      cTree = tree.slice(current);
       if (symbol.s === 'function') {
-        let cTree = tree.slice(current);
         list.push(this.parseFunction(cTree, (name, params, context) => {
           let block = this.realLine(context, realno);
           // 创建一个函数类型类
@@ -324,12 +338,21 @@ export class AST extends Core {
         list.push(new TYPE.StringBlock(symbol, realno));
       } else if(symbol.s === '/*'){
         list.push(new TYPE.AnnotationBlock(symbol, realno));
+      } else if(symbol.s === '('){
+        this.convergenceBracket(cTree, realno, (Bracket) => {
+          list.push(Bracket);
+        });
       } else {
         list.push(symbol);
       }
       current += 1;
     }
     return list;
+  }
+  convergenceBracket(tree = [], no = 0, cb){
+    let block = this.searchBlockDiff(tree, /\(/, /\)/, 'nest');
+    let Bracket = new TYPE.Bracket(this.fetchTree(tree, block), block)
+    return cb && cb(Bracket);
   }
   /**
    * 收敛声明
@@ -357,8 +380,10 @@ export class AST extends Core {
           let statement = [];
           let end = content.length ? content[content.length - 1] : [0, 0];
           content.forEach(item => {
-            let contentTree = this.splitStatement(type, this.fetchTree(cTree, item), realno, (type, name, value) => {
-              statement.push(new TYPE.Statement(type, name, value, this.realLine(item, realno), realno));
+            let contentTree = this.splitStatement(type, this.fetchTree(cTree, item), realno, (type, name, value, left, right) => {
+              let start = left.length? left[0] : {};
+              let end = right.length ? right[right.length-1] : {};
+              statement.push(new TYPE.Statement(type, name, value, this.realLine(item, realno), realno, start, end));
             });
             // cTree = cTree.slice(item[1]);
           });
@@ -462,13 +487,14 @@ export class AST extends Core {
       {},
       {}
     );
-    let rightTree;
+    let rightTree = [];
     let rightState;
     let name;
     let value;
     if(leftTree.length < tree.length){
       if(right[0] >= 0){
-        rightTree = this.fetchTree(tree, right[1] < 0 ? [right[0], tree.length] : right);
+        right = right[1] < 0 ? [right[0], tree.length] : right;
+        rightTree = this.fetchTree(tree, right);
         rightState = this.searchValid(rightTree,
           this.createObjByList(['=', ',', '\n']),
           {},
@@ -481,7 +507,7 @@ export class AST extends Core {
           value = ((rightState.otherList[0] || {}).symbol||{});
         }
         
-        // console.log(tree, right, rightTree, rightState, rightState.otherList)
+        console.log(tree, right, rightTree, rightState, rightState.otherList)
       }
     }
 
@@ -504,7 +530,7 @@ export class AST extends Core {
       // TODO: 需要处理声明中有其它字符; let /**/ name /* */;
     }
     // console.log(type, name, value, leftState, rightState)
-    return cb ? cb(type, name, value) : [type, name, value];
+    return cb ? cb(type, name, value, leftTree, rightTree) : [type, name, value, leftTree, rightTree];
   }
   /**
    * 查询有效节点
@@ -585,7 +611,7 @@ export class AST extends Core {
   parseParams(block){
     return new TYPE.FunctionParams(
       block,
-      ''
+      this.trim(this.fetchContent(block))
     );
   }
   parseContext(block){

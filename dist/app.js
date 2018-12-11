@@ -64,7 +64,7 @@
 /******/
 /******/ 	var hotApplyOnUpdate = true;
 /******/ 	// eslint-disable-next-line no-unused-vars
-/******/ 	var hotCurrentHash = "edcab236ad32e64e60bc";
+/******/ 	var hotCurrentHash = "14b40d70c5d592e7dc39";
 /******/ 	var hotRequestTimeout = 10000;
 /******/ 	var hotCurrentModuleData = {};
 /******/ 	var hotCurrentChildModule;
@@ -849,6 +849,15 @@ var g = 4;
 *//*1*//*222*/123
 var h=5;
 `
+sent = `
+function rand(max){
+  function a(){
+    var b = 2;
+  }
+  return Math.floor(Math.random());
+}
+console.log(rand(10));
+`;
 //sent = `var s=window["webpackJsonp"],f=s.push.bind(s);s.push=n,s=s.slice();`;
 window.ast = new _ast__WEBPACK_IMPORTED_MODULE_0__["AST"](sent,{});
 console.log(ast);
@@ -875,6 +884,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
 
     this.content = content;
     this.option = option;
+    this.scoped = 0;
 
     // 分行
     this.lines = content.split("\n");
@@ -889,7 +899,13 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
 
     // 上下文环境
     this.contextTree = {
-      scope: {}
+      scope: {
+      },
+      root: {
+        console: {
+          log: console.log
+        }
+      }
     };
 
     // 定义左右边界符, 配合type使用
@@ -929,7 +945,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
     this.termsTree = this.buildTermsTree();
     // 语法树
     this.grammarTree = this.buildGrammarTree(this.termsTree, 0);
-    this.contextTree.scope = this.buildContextTree(this.grammarTree);
+    this.buildContextTree(this.grammarTree, this.contextTree.scope, this.contextTree.root);
   }
   
   /**
@@ -965,6 +981,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
           list.push({
             s: 'un',
             t: text,
+            n: list.length,
             i: endIndex + cutIndx,
             l: line
           });
@@ -975,6 +992,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
         list.push({
           s: symbol[0],
           i: symbol.index + cutIndx,
+          n: list.length,
           l: line
         });
         // 递增时需使用length, 因为可能存在多个换行符
@@ -989,6 +1007,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
             list.push({
               s: this.trim(symbol[0]),
               i: symbol.index + cutIndx,
+              n: list.length,
               l: line
             });
             endIndex = symbol.index + symbol[0].length;
@@ -1039,6 +1058,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
               s: type,
               t: text,
               i: cutIndx - text.length - type.length  - this.ambitMap[type].right.length,
+              n: list.length,
               l: line
             });
             type = '';
@@ -1057,29 +1077,31 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
    * 构建环境树
    * @param {Array} tree 语法树
    */
-  buildContextTree(tree = [], scope = {}){
+  buildContextTree(tree = [], scope = {}, parent = {}){
     let name;
     let value;
     let current;
-    // console.log(tree);
     tree.forEach(item => {
       name = item.name;
       current = {
+        parent,
         scope: {},
+        scopeIndex: this.scoped++,
         type: item.type,
         name: item.name,
         value: item instanceof _type__WEBPACK_IMPORTED_MODULE_1__["default"].Functions ? item : item.value
       };
+      item.parent = parent;
       if(item instanceof _type__WEBPACK_IMPORTED_MODULE_1__["default"].Statement){
         scope[name] = current;
         if (item.value && item.value.type === 'function') {
-          current.scope = this.buildContextTree(item.value.child, current.scope);
+          current.scope = this.buildContextTree(item.value.child, current.scope, scope);
         }
       } else if(item instanceof _type__WEBPACK_IMPORTED_MODULE_1__["default"].Functions){
         if(name){
           scope[name] = current;
           if(item.child.length){
-            current.scope = this.buildContextTree(item.child, current.scope);
+            current.scope = this.buildContextTree(item.child, current.scope, scope);
           }
         } else {
           current.name = 'anonymous';
@@ -1087,7 +1109,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
           scope['[[scope]]'] = scope['[[scope]]'] || [];
           scope['[[scope]]'].push(current);
           if(item.child.length){
-            current.scope = this.buildContextTree(item.child, current.scope);
+            current.scope = this.buildContextTree(item.child, current.scope, scope);
           }
         }
       } else if(item instanceof _type__WEBPACK_IMPORTED_MODULE_1__["default"].Assignment){
@@ -1095,8 +1117,8 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
         current.name = name;
         current.type = 'var';
         scope[name] = current;
-        if(current.value  && current.value instanceof _type__WEBPACK_IMPORTED_MODULE_1__["default"].Functions && item.child.length){
-          current['[[scope]]'] = this.buildContextTree(item.child, current['[[scope]]']);
+        if(current.value && current.value instanceof _type__WEBPACK_IMPORTED_MODULE_1__["default"].Functions && item.child.length){
+          current['[[scope]]'] = this.buildContextTree(item.child, current['[[scope]]'], scope);
         }
       }
     });
@@ -1167,11 +1189,12 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
     let current = 0;
     let len = tree.length;
     let realno;
+    let cTree;
     while (current < len) {
       symbol = tree[current];
       realno = current + no;
+      cTree = tree.slice(current);
       if (symbol.s === 'function') {
-        let cTree = tree.slice(current);
         list.push(this.parseFunction(cTree, (name, params, context) => {
           let block = this.realLine(context, realno);
           // 创建一个函数类型类
@@ -1191,12 +1214,21 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
         list.push(new _type__WEBPACK_IMPORTED_MODULE_1__["default"].StringBlock(symbol, realno));
       } else if(symbol.s === '/*'){
         list.push(new _type__WEBPACK_IMPORTED_MODULE_1__["default"].AnnotationBlock(symbol, realno));
+      } else if(symbol.s === '('){
+        this.convergenceBracket(cTree, realno, (Bracket) => {
+          list.push(Bracket);
+        });
       } else {
         list.push(symbol);
       }
       current += 1;
     }
     return list;
+  }
+  convergenceBracket(tree = [], no = 0, cb){
+    let block = this.searchBlockDiff(tree, /\(/, /\)/, 'nest');
+    let Bracket = new _type__WEBPACK_IMPORTED_MODULE_1__["default"].Bracket(this.fetchTree(tree, block), block)
+    return cb && cb(Bracket);
   }
   /**
    * 收敛声明
@@ -1224,8 +1256,10 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
           let statement = [];
           let end = content.length ? content[content.length - 1] : [0, 0];
           content.forEach(item => {
-            let contentTree = this.splitStatement(type, this.fetchTree(cTree, item), realno, (type, name, value) => {
-              statement.push(new _type__WEBPACK_IMPORTED_MODULE_1__["default"].Statement(type, name, value, this.realLine(item, realno), realno));
+            let contentTree = this.splitStatement(type, this.fetchTree(cTree, item), realno, (type, name, value, left, right) => {
+              let start = left.length? left[0] : {};
+              let end = right.length ? right[right.length-1] : {};
+              statement.push(new _type__WEBPACK_IMPORTED_MODULE_1__["default"].Statement(type, name, value, this.realLine(item, realno), realno, start, end));
             });
             // cTree = cTree.slice(item[1]);
           });
@@ -1329,13 +1363,14 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
       {},
       {}
     );
-    let rightTree;
+    let rightTree = [];
     let rightState;
     let name;
     let value;
     if(leftTree.length < tree.length){
       if(right[0] >= 0){
-        rightTree = this.fetchTree(tree, right[1] < 0 ? [right[0], tree.length] : right);
+        right = right[1] < 0 ? [right[0], tree.length] : right;
+        rightTree = this.fetchTree(tree, right);
         rightState = this.searchValid(rightTree,
           this.createObjByList(['=', ',', '\n']),
           {},
@@ -1348,7 +1383,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
           value = ((rightState.otherList[0] || {}).symbol||{});
         }
         
-        // console.log(tree, right, rightTree, rightState, rightState.otherList)
+        console.log(tree, right, rightTree, rightState, rightState.otherList)
       }
     }
 
@@ -1371,7 +1406,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
       // TODO: 需要处理声明中有其它字符; let /**/ name /* */;
     }
     // console.log(type, name, value, leftState, rightState)
-    return cb ? cb(type, name, value) : [type, name, value];
+    return cb ? cb(type, name, value, leftTree, rightTree) : [type, name, value, leftTree, rightTree];
   }
   /**
    * 查询有效节点
@@ -1452,7 +1487,7 @@ class AST extends _core__WEBPACK_IMPORTED_MODULE_0__["Core"] {
   parseParams(block){
     return new _type__WEBPACK_IMPORTED_MODULE_1__["default"].FunctionParams(
       block,
-      ''
+      this.trim(this.fetchContent(block))
     );
   }
   parseContext(block){
@@ -1687,7 +1722,6 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "FunctionParams", function() { return FunctionParams; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "FunctionContext", function() { return FunctionContext; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Functions", function() { return Functions; });
-/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Statement2", function() { return Statement2; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Statement", function() { return Statement; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "ExpressionStatement", function() { return ExpressionStatement; });
 /* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "EmptyStatement", function() { return EmptyStatement; });
@@ -1780,21 +1814,15 @@ const Functions = function(type, name, params, context, treeno, symbol){
   this.index = symbol.i;
   return this;
 }
-const Statement2 = function(type, name, body, block, treeno, symbol){
-  this.type = type;
-  this.name = name;
-  this.body = body;
-  this.block = block;
-  this.treeno = treeno;
-  this.lineno = symbol.l;
-  this.index = symbol.i;
-}
-const Statement = function(type, name, value, content, treeno){
+
+const Statement = function(type, name, value, content, treeno, start, end){
   this.s = type;
   this.type = type;
   this.name = name;
   this.value = value;
   this.treeno = treeno;
+  this.start = start;
+  this.end = end;
   this.content = content;
 }
 const ExpressionStatement = function(){

@@ -38,6 +38,15 @@ var g = 4;
 *//*1*//*222*/123
 var h=5;
 `
+sent = `
+function rand(max){
+  function a(){
+    var b = 2;
+  }
+  return Math.floor(Math.random());
+}
+console.log(rand(10));
+`;
 //sent = `var s=window["webpackJsonp"],f=s.push.bind(s);s.push=n,s=s.slice();`;
 window.ast = new AST(sent,{});
 console.log(ast);

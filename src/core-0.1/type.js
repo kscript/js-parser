@@ -46,21 +46,15 @@ export const Functions = function(type, name, params, context, treeno, symbol){
   this.index = symbol.i;
   return this;
 }
-export const Statement2 = function(type, name, body, block, treeno, symbol){
-  this.type = type;
-  this.name = name;
-  this.body = body;
-  this.block = block;
-  this.treeno = treeno;
-  this.lineno = symbol.l;
-  this.index = symbol.i;
-}
-export const Statement = function(type, name, value, content, treeno){
+
+export const Statement = function(type, name, value, content, treeno, start, end){
   this.s = type;
   this.type = type;
   this.name = name;
   this.value = value;
   this.treeno = treeno;
+  this.start = start;
+  this.end = end;
   this.content = content;
 }
 export const ExpressionStatement = function(){
